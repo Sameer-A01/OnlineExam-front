@@ -1,0 +1,11 @@
+/node_modules
+# Ignore build or dist folders (if any)
+/frontend/build
+/server/dist
+
+# Ignore log files
+*.log
+
+# Ignore any specific IDE or editor files
+.vscode/
+.idea/
