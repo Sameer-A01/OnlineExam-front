@@ -32,10 +32,10 @@ const Sidebar = ({ onCollapseChange }) => {
   ];
 
   const [itemsToRender, setItemsToRender] = useState(userMenuItems);
-  const [collapsed, setCollapsed] = useState(() => {
-    const saved = localStorage.getItem('sidebar-collapsed');
-    return saved ? JSON.parse(saved) : false;
-  });
+const [collapsed, setCollapsed] = useState(() => {
+  const saved = localStorage.getItem('sidebar-collapsed');
+  return saved !== null ? JSON.parse(saved) : true; // ✅ Default to collapsed
+});
 
   // New state for stars animation
   const [stars, setStars] = useState([]);
