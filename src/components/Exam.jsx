@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Trash2, Edit2, Eye, ArrowLeft, X } from 'lucide-react';
+import { PlusCircle, Trash2, Edit2, Eye, ArrowLeft, Plus, X } from 'lucide-react';
 import axiosInstance from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 import { InlineMath, BlockMath } from 'react-katex';
@@ -706,205 +706,298 @@ const ExamAdmin = () => {
   );
 
   // Render question management
-  const renderQuestionManagement = () => (
-    <div>
-      <div className="mb-6">
-        <button
-          onClick={() => setView('exams')}
-          className="flex items-center text-blue-600 hover:text-blue-800"
-        >
-          <ArrowLeft size={16} className="mr-1" /> Back to Exams
-        </button>
-        <div className="mt-2">
-          <h1 className="text-2xl font-bold">{currentExam.title} - Questions</h1>
-          <p className="text-gray-600">{new Date(currentExam.examDate).toLocaleDateString()} | {currentExam.duration} minutes</p>
+const renderQuestionManagement = () => (
+  <div className="min-h-screen bg-gray-50">
+    {/* Header Section */}
+    <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="py-4">
+          <button
+            onClick={() => setView('exams')}
+            className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors duration-200"
+          >
+            <ArrowLeft size={16} className="mr-2" />
+            Back to Exams
+          </button>
+          <div className="mt-3">
+            <h1 className="text-3xl font-bold text-gray-900">{currentExam.title}</h1>
+            <div className="mt-1 flex items-center text-sm text-gray-500">
+              <span>{new Date(currentExam.examDate).toLocaleDateString()}</span>
+              <span className="mx-2">•</span>
+              <span>{currentExam.duration} minutes</span>
+            </div>
+          </div>
         </div>
       </div>
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h2 className="text-lg font-semibold mb-4">{editingQuestion ? 'Edit Question' : 'Add New Question'}</h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
-            <select
-              name="section"
-              value={questionForm.section}
-              onChange={handleQuestionChange}
-              className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-              required
-            >
-              <option value="">Select a section</option>
-              {sections.map((section) => (
-                <option key={section} value={section}>
-                  {section}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Question Text (Supports LaTeX, e.g., $x^2$ or $$x^2$$)</label>
-            <textarea
-              name="questionText"
-              value={questionForm.questionText}
-              onChange={handleQuestionChange}
-              placeholder="Enter your question here, use $...$ for inline LaTeX or $$...$$ for display math"
-              className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-              rows="2"
-              required
-            />
-            <p className="mt-1 text-xs text-gray-500">Preview:</p>
-            <div>{renderMathOrText(questionForm.questionText)}</div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Question Image URL (Optional)</label>
-            <input
-              name="imageUrl"
-              value={questionForm.imageUrl}
-              onChange={handleQuestionChange}
-              placeholder="https://example.com/image.jpg"
-              className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Marks</label>
-              <input
-                name="marks"
-                type="number"
-                value={questionForm.marks}
-                onChange={handleQuestionChange}
-                className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-                min="0"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Negative Marks</label>
-              <input
-                name="negativeMarks"
-                type="number"
-                value={questionForm.negativeMarks}
-                onChange={handleQuestionChange}
-                className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-                min="0"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
-            <select
-              name="difficulty"
-              value={questionForm.difficulty}
-              onChange={handleQuestionChange}
-              className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-            >
-              <option value="none">None</option>
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-            <input
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={handleTagInput}
-              placeholder="Type a tag and press Enter"
-              className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-            />
-            <p className="mt-1 text-xs text-gray-500">Press Enter to add a tag</p>
-            {questionForm.tags.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {questionForm.tags.map((tag, index) => (
-                  <div
-                    key={index}
-                    className="inline-flex items-center bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(index)}
-                      className="ml-1 text-blue-600 hover:text-blue-800"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+    </div>
+
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Question Form Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+        <div className="px-6 py-5 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">
+            {editingQuestion ? 'Edit Question' : 'Add New Question'}
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">
+            {editingQuestion ? 'Update the question details below' : 'Create a new question for this exam'}
+          </p>
+        </div>
+        
+        <div className="px-6 py-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column */}
+            <div className="space-y-6">
+              {/* Section Selection */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Section <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="section"
+                  value={questionForm.section}
+                  onChange={handleQuestionChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  required
+                >
+                  <option value="">Select a section</option>
+                  {sections.map((section) => (
+                    <option key={section} value={section}>
+                      {section}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
+
+              {/* Marks and Negative Marks */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Marks
+                  </label>
+                  <input
+                    name="marks"
+                    type="number"
+                    value={questionForm.marks}
+                    onChange={handleQuestionChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                    min="0"
+                    step="0.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Negative Marks
+                  </label>
+                  <input
+                    name="negativeMarks"
+                    type="number"
+                    value={questionForm.negativeMarks}
+                    onChange={handleQuestionChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                    min="0"
+                    step="0.25"
+                  />
+                </div>
+              </div>
+
+              {/* Difficulty */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Difficulty Level
+                </label>
+                <select
+                  name="difficulty"
+                  value={questionForm.difficulty}
+                  onChange={handleQuestionChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                >
+                  <option value="none">Not Specified</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Tags
+                </label>
+                <input
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagInput}
+                  placeholder="Type a tag and press Enter"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                />
+                {questionForm.tags.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {questionForm.tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center bg-blue-50 text-blue-700 text-sm px-3 py-1 rounded-full border border-blue-200"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => removeTag(index)}
+                          className="ml-2 text-blue-500 hover:text-blue-700 transition-colors duration-200"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-6">
+              {/* Question Text */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Question Text <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  name="questionText"
+                  value={questionForm.questionText}
+                  onChange={handleQuestionChange}
+                  placeholder="Enter your question here. Use $...$ for inline LaTeX or $$...$$ for display math"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
+                  rows="4"
+                  required
+                />
+                {questionForm.questionText && (
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg border">
+                    <p className="text-xs font-medium text-gray-600 mb-2">Preview:</p>
+                    <div className="text-sm">{renderMathOrText(questionForm.questionText)}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Question Image */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Question Image URL
+                </label>
+                <input
+                  name="imageUrl"
+                  value={questionForm.imageUrl}
+                  onChange={handleQuestionChange}
+                  placeholder="https://example.com/image.jpg"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                />
+              </div>
+
+              {/* Explanation */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Explanation
+                </label>
+                <textarea
+                  name="explanation"
+                  value={questionForm.explanation}
+                  onChange={handleQuestionChange}
+                  placeholder="Provide an explanation for the correct answer. Use $...$ for LaTeX"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
+                  rows="3"
+                />
+                {questionForm.explanation && (
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg border">
+                    <p className="text-xs font-medium text-gray-600 mb-2">Preview:</p>
+                    <div className="text-sm">{renderMathOrText(questionForm.explanation)}</div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Explanation (Supports LaTeX)</label>
-            <textarea
-              name="explanation"
-              value={questionForm.explanation}
-              onChange={handleQuestionChange}
-              placeholder="Provide an explanation for the correct answer, use $...$ for LaTeX"
-              className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-              rows="3"
-            />
-            <p className="mt-1 text-xs text-gray-500">Preview:</p>
-            <div>{renderMathOrText(questionForm.explanation)}</div>
-          </div>
-          <div>
-            <div className="flex justify-between items-center">
-              <label className="block text-sm font-medium text-gray-700">Options</label>
+
+          {/* Options Section */}
+          <div className="mt-8">
+            <div className="flex justify-between items-center mb-4">
+              <label className="block text-sm font-semibold text-gray-700">
+                Answer Options <span className="text-red-500">*</span>
+              </label>
               <button
                 type="button"
                 onClick={addOption}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors duration-200"
               >
-                + Add Option
+                <Plus size={14} className="mr-1" />
+                Add Option
               </button>
             </div>
-            <div className="mt-2 space-y-2">
+            
+            <div className="space-y-4">
               {questionForm.options.map((option, index) => (
-                <div key={index} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={questionForm.correctAnswers.includes(index)}
-                    onChange={() => toggleCorrectAnswer(index)}
-                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div className="flex-grow space-y-2">
-                    <input
-                      value={option.optionText}
-                      onChange={(e) => handleOptionChange(index, 'optionText', e.target.value)}
-                      placeholder={`Option ${index + 1} (Supports LaTeX, e.g., $x^2$)`}
-                      className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-                    />
-                    <div>{renderMathOrText(option.optionText)}</div>
-                    <input
-                      value={option.imageUrl}
-                      onChange={(e) => handleOptionChange(index, 'imageUrl', e.target.value)}
-                      placeholder="Option Image URL (Optional)"
-                      className="w-full p-2 border rounded focus:ring focus:ring-blue-300"
-                    />
-                    {option.imageUrl && (
-                      <img src={option.imageUrl} alt={`Option ${index + 1}`} className="max-h-20 object-contain" />
-                    )}
+                <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-start space-x-3">
+                    <div className="flex items-center pt-2">
+                      <input
+                        type="checkbox"
+                        checked={questionForm.correctAnswers.includes(index)}
+                        onChange={() => toggleCorrectAnswer(index)}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">
+                          Option {String.fromCharCode(65 + index)}
+                        </span>
+                        {questionForm.options.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => removeOption(index)}
+                            className="text-red-500 hover:text-red-700 transition-colors duration-200"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                      
+                      <input
+                        value={option.optionText}
+                        onChange={(e) => handleOptionChange(index, 'optionText', e.target.value)}
+                        placeholder={`Enter option ${String.fromCharCode(65 + index)} (Supports LaTeX)`}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      />
+                      
+                      {option.optionText && (
+                        <div className="p-2 bg-white rounded border">
+                          <p className="text-xs text-gray-600 mb-1">Preview:</p>
+                          <div className="text-sm">{renderMathOrText(option.optionText)}</div>
+                        </div>
+                      )}
+                      
+                      <input
+                        value={option.imageUrl}
+                        onChange={(e) => handleOptionChange(index, 'imageUrl', e.target.value)}
+                        placeholder="Option image URL (optional)"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      />
+                      
+                      {option.imageUrl && (
+                        <img 
+                          src={option.imageUrl} 
+                          alt={`Option ${String.fromCharCode(65 + index)}`} 
+                          className="max-h-24 object-contain rounded border"
+                        />
+                      )}
+                    </div>
                   </div>
-                  {questionForm.options.length > 2 && (
-                    <button
-                      type="button"
-                      onClick={() => removeOption(index)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
                 </div>
               ))}
             </div>
-            <p className="mt-1 text-xs text-gray-500">Check the box for correct answer(s)</p>
+            <p className="mt-2 text-xs text-gray-500">
+              Check the box next to correct answer(s)
+            </p>
           </div>
-          <div className="flex justify-end space-x-2">
-            <button
-              type="button"
-              onClick={handleAddQuestion}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-            >
-              {editingQuestion ? 'Update Question' : 'Add Question'}
-            </button>
+
+          {/* Action Buttons */}
+          <div className="mt-8 flex justify-end space-x-3">
             {editingQuestion && (
               <button
                 type="button"
@@ -912,101 +1005,185 @@ const ExamAdmin = () => {
                   resetQuestionForm();
                   setEditingQuestion(null);
                 }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                className="px-6 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200"
               >
                 Cancel
               </button>
             )}
+            <button
+              type="button"
+              onClick={handleAddQuestion}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-200 shadow-sm"
+            >
+              {editingQuestion ? 'Update Question' : 'Add Question'}
+            </button>
           </div>
         </div>
       </div>
-      <div className="bg-white rounded-lg shadow-md">
-        <h2 className="p-4 border-b text-lg font-semibold">Question List</h2>
+
+      {/* Questions List */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="px-6 py-5 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">Questions</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            {questions.length} question{questions.length !== 1 ? 's' : ''} added
+          </p>
+        </div>
+        
         {questions.length === 0 ? (
-          <div className="p-6 text-center text-gray-500">
-            No questions have been added to this exam yet.
+          <div className="px-6 py-12 text-center">
+            <div className="text-gray-400 mb-4">
+              <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No questions yet</h3>
+            <p className="text-gray-500">Get started by adding your first question above.</p>
           </div>
         ) : (
-          <div className="divide-y">
+          <div>
             {sections.map((section) => {
               const sectionQuestions = questions.filter((q) => q.section === section);
               if (sectionQuestions.length === 0) return null;
+              
               return (
-                <div key={section}>
-                  <h3 className="p-4 text-lg font-medium bg-gray-50">{section}</h3>
-                  {sectionQuestions.map((question, index) => (
-                    <div key={question._id} className="p-4">
-                      <div className="flex justify-between">
-                        <h3 className="font-medium">Question {index + 1}</h3>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-600">Marks: {question.marks}</span>
-                          <span className="text-sm text-gray-600">Difficulty: {question.difficulty}</span>
-                          <button
-                            onClick={() => initQuestionEdit(question)}
-                            className="text-blue-600 hover:text-blue-900"
-                            title="Edit Question"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteQuestion(question._id)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                      <div>{renderMathOrText(question.questionText)}</div>
-                      {question.imageUrl && (
-                        <div className="my-2">
-                          <img src={question.imageUrl} alt="Question" className="max-h-40 object-contain" />
-                        </div>
-                      )}
-                      <div className="mt-2 space-y-1">
-                        {question.options.map((option, optIndex) => (
-                          <div
-                            key={optIndex}
-                            className={`p-2 rounded ${
-                              question.correctAnswers.includes(optIndex)
-                                ? 'bg-green-50 border border-green-200'
-                                : 'bg-gray-50'
-                            }`}
-                          >
-                            <div>{renderMathOrText(option.optionText)}</div>
-                            {option.imageUrl && (
-                              <img
-                                src={option.imageUrl}
-                                alt={`Option ${optIndex + 1}`}
-                                className="max-h-20 object-contain mt-1"
-                              />
-                            )}
-                            {question.correctAnswers.includes(optIndex) && (
-                              <span className="ml-2 text-xs text-green-600">✓ Correct</span>
-                            )}
+                <div key={section} className="border-b border-gray-200 last:border-b-0">
+                  <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900">{section}</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {sectionQuestions.length} question{sectionQuestions.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  
+                  <div className="divide-y divide-gray-200">
+                    {sectionQuestions.map((question, index) => (
+                      <div key={question._id} className="px-6 py-6">
+                        {/* Question Header */}
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-2">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                Q{index + 1}
+                              </span>
+                              <span className="text-sm text-gray-600">
+                                {question.marks} mark{question.marks !== 1 ? 's' : ''}
+                              </span>
+                              {question.negativeMarks > 0 && (
+                                <span className="text-sm text-red-600">
+                                  -{question.negativeMarks} negative
+                                </span>
+                              )}
+                              {question.difficulty !== 'none' && (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  question.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                                  question.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-red-100 text-red-800'
+                                }`}>
+                                  {question.difficulty}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                      {question.tags && question.tags.length > 0 && (
-                        <div className="mt-2">
-                          <span className="text-sm font-medium text-gray-700">Tags: </span>
-                          {question.tags.map((tag, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mr-1"
+                          
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => initQuestionEdit(question)}
+                              className="p-2 text-gray-400 hover:text-blue-600 transition-colors duration-200"
+                              title="Edit Question"
                             >
-                              {tag}
-                            </span>
-                          ))}
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuestion(question._id)}
+                              className="p-2 text-gray-400 hover:text-red-600 transition-colors duration-200"
+                              title="Delete Question"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
-                      )}
-                      {question.explanation && (
-                        <div className="mt-2">
-                          <span className="text-sm font-medium text-gray-700">Explanation: </span>
-                          <div>{renderMathOrText(question.explanation)}</div>
+
+                        {/* Question Content */}
+                        <div className="space-y-4">
+                          <div className="text-gray-900">
+                            {renderMathOrText(question.questionText)}
+                          </div>
+                          
+                          {question.imageUrl && (
+                            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                              <img 
+                                src={question.imageUrl} 
+                                alt="Question" 
+                                className="max-h-48 object-contain mx-auto rounded"
+                              />
+                            </div>
+                          )}
+
+                          {/* Options */}
+                          <div className="space-y-2">
+                            {question.options.map((option, optIndex) => (
+                              <div
+                                key={optIndex}
+                                className={`p-3 rounded-lg border ${
+                                  question.correctAnswers.includes(optIndex)
+                                    ? 'bg-green-50 border-green-200'
+                                    : 'bg-gray-50 border-gray-200'
+                                }`}
+                              >
+                                <div className="flex items-start space-x-3">
+                                  <span className="inline-flex items-center justify-center w-6 h-6 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-full">
+                                    {String.fromCharCode(65 + optIndex)}
+                                  </span>
+                                  <div className="flex-1">
+                                    <div className="text-sm text-gray-900">
+                                      {renderMathOrText(option.optionText)}
+                                    </div>
+                                    {option.imageUrl && (
+                                      <img
+                                        src={option.imageUrl}
+                                        alt={`Option ${String.fromCharCode(65 + optIndex)}`}
+                                        className="max-h-20 object-contain mt-2 rounded"
+                                      />
+                                    )}
+                                  </div>
+                                  {question.correctAnswers.includes(optIndex) && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                      Correct
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Tags */}
+                          {question.tags && question.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              <span className="text-sm font-medium text-gray-700">Tags:</span>
+                              {question.tags.map((tag, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Explanation */}
+                          {question.explanation && (
+                            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                              <p className="text-sm font-semibold text-blue-900 mb-2">Explanation:</p>
+                              <div className="text-sm text-blue-800">
+                                {renderMathOrText(question.explanation)}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })}
@@ -1014,7 +1191,8 @@ const ExamAdmin = () => {
         )}
       </div>
     </div>
-  );
+  </div>
+);
 
   // Main render
   return (
