@@ -27,6 +27,8 @@ import MyCourses from "./components/MyCourses";
 import MyInstructors from "./components/MyInstructors";
 import Notice from "./components/Notice";
 import MyNotice from "./components/MyNotice";
+import UserDashboard from "./components/UserDashboard";
+import ResultList from "./components/ResultList";
 
 
 const App = () => (
@@ -89,6 +91,10 @@ const App = () => (
             element={<Results />}
           />
           <Route
+            path="/admin-dashboard/ResultList"
+            element={<ResultList />}
+          />
+          <Route
             path="/admin-dashboard/orders"
             element={
               <ProtectedRoute requiredRole={["admin"]}>
@@ -108,8 +114,9 @@ const App = () => (
             </ProtectedRoute>
           }
         >
-          <Route index element={<Profile />} />
+          <Route index element={<UserDashboard />} />
           <Route path="orders" element={<Orders />} />
+          <Route path="UserDashboard" element={<UserDashboard />} />
           <Route path="MyCourses" element={<MyCourses />} />
           <Route path="MyInstructors" element={<MyInstructors />} />
           <Route path="Discussions" element={<UserDiscussion />} />

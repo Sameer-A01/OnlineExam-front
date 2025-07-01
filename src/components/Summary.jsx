@@ -1,443 +1,456 @@
-import React from 'react';
+
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext'; // Import useAuth for consistent user data
+import { useNavigate } from 'react-router-dom'; // For redirecting to login
 import { 
-  LineChart, Line, PieChart, Pie, 
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
-  ResponsiveContainer, Cell, BarChart, Bar
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import { 
-  Bell, User, Book, Users, FileText, MessageSquare, 
-  Award, Calendar, Search, ChevronRight, Edit3, Clock
+  Users, BookOpen, Calendar, MessageCircle, Bell, TrendingUp,
+  Award, UserCheck, AlertCircle, CheckCircle, Clock, Star,
+  GraduationCap, FileText, HelpCircle, Activity
 } from 'lucide-react';
-
-// Mock data for charts and statistics
-const examScoreData = [
-  { name: 'Physics', average: 75 },
-  { name: 'Math', average: 82 },
-  { name: 'Chemistry', average: 68 },
-  { name: 'Biology', average: 79 },
-  { name: 'English', average: 88 },
-];
-
-const submissionData = [
-  { name: 'Assignment 1', complete: 38, pending: 12 },
-  { name: 'Assignment 2', complete: 45, pending: 5 },
-  { name: 'Quiz 1', complete: 42, pending: 8 },
-  { name: 'Project', complete: 30, pending: 20 },
-];
-
-const courseDistributionData = [
-  { name: 'Science', value: 35, color: '#6366F1' },
-  { name: 'Arts', value: 25, color: '#EC4899' },
-  { name: 'Commerce', value: 20, color: '#10B981' },
-  { name: 'Computer Science', value: 20, color: '#F59E0B' },
-];
-
-const recentActivities = [
-  { id: 1, activity: 'New assignment posted', course: 'Physics', time: '2 hours ago', icon: <FileText size={16} /> },
-  { id: 2, activity: 'Exam scheduled', course: 'Mathematics', time: '5 hours ago', icon: <Calendar size={16} /> },
-  { id: 3, activity: 'New discussion topic', course: 'Biology', time: 'Yesterday', icon: <MessageSquare size={16} /> },
-  { id: 4, activity: 'Grades published', course: 'Chemistry', time: 'Yesterday', icon: <Award size={16} /> },
-  { id: 5, activity: 'Course material updated', course: 'English', time: '2 days ago', icon: <Book size={16} /> },
-];
-
-const upcomingExams = [
-  { id: 1, subject: 'Physics Midterm', date: 'May 25, 2025', time: '10:00 AM' },
-  { id: 2, subject: 'Mathematics Quiz', date: 'May 28, 2025', time: '1:00 PM' },
-  { id: 3, subject: 'Biology Lab Test', date: 'June 2, 2025', time: '11:30 AM' },
-];
-
-const pendingAssignments = [
-  { id: 1, title: 'Chemical Equations', course: 'Chemistry', deadline: 'May 23, 2025' },
-  { id: 2, title: 'Literary Analysis', course: 'English', deadline: 'May 26, 2025' },
-  { id: 3, title: 'Data Structures Problem Set', course: 'Computer Science', deadline: 'May 29, 2025' },
-];
+import axiosInstance from '../utils/api';
+import LakshyaLoader from '../components/LakshyaLoader';
 
 const Dashboard = () => {
-  return (
-    <div className="h-screen bg-gray-50">
-      {/* Top Bar */}
-      <div className="bg-white shadow-sm px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <h1 className="text-xl font-bold text-indigo-700">Lakshay Institute</h1>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search..."
-              className="pl-10 pr-4 py-2 rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+  const { user } = useAuth(); // Get user from AuthContext
+  const navigate = useNavigate(); // For redirecting to login
+  const [dashboardData, setDashboardData] = useState({
+    userCount: 0,
+    batchCount: 0,
+    examCount: 0,
+    doubtCount: 0,
+    instructorCount: 0,
+    noticeCount: 0
+  });
+  const [users, setUsers] = useState([]);
+  const [notices, setNotices] = useState([]);
+  const [exams, setExams] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [userData, setUserData] = useState({ role: 'user', name: 'User' });
+
+  useEffect(() => {
+    if (!user?.userId) {
+      setError('Please log in to access your dashboard');
+      setLoading(false);
+      navigate('/login'); // Redirect to login if user is not authenticated
+      return;
+    }
+    fetchDashboardData();
+  }, [user, navigate]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('ims_token');
+
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      // Fetch user info from the backend
+      const userResponse = await axiosInstance.get(`/users/${user.userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (userResponse.data.success) {
+        setUserData({
+          name: userResponse.data.user.name,
+          role: userResponse.data.user.role
+        });
+      } else {
+        throw new Error('Failed to fetch user data');
+      }
+
+      // Fetch dashboard overview
+      const overviewResponse = await axiosInstance.get('/dashboard/overview', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDashboardData(overviewResponse.data.data);
+
+      // Fetch additional data based on user role
+      const promises = [
+        axiosInstance.get('/dashboard/notices', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axiosInstance.get('/dashboard/exams', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axiosInstance.get('/dashboard/notifications', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ];
+
+      if (userResponse.data.user.role === 'admin') {
+        promises.push(axiosInstance.get('/dashboard/users', {
+          headers: { Authorization: `Bearer ${token}` }
+        }));
+      }
+
+      const [noticesRes, examsRes, notificationsRes, usersRes] = await Promise.all(promises);
+      
+      setNotices(noticesRes.data.data || []);
+      setExams(examsRes.data.data || []);
+      setNotifications(notificationsRes.data.data || []);
+      if (usersRes) setUsers(usersRes.data.data || []);
+
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+      setError(err.message || 'Failed to fetch dashboard data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId) => {
+    try {
+      const token = localStorage.getItem('ims_token');
+      await axiosInstance.put(`/dashboard/notifications/${notificationId}/read`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif._id === notificationId ? { ...notif, isRead: true } : notif
+        )
+      );
+    } catch (err) {
+      console.error('Error marking notification as read:', err);
+    }
+  };
+
+  // Process data for charts
+  const getChartData = () => {
+    const statusData = [
+      { name: 'Active Users', value: dashboardData.userCount, color: '#3B82F6' },
+      { name: 'Active Batches', value: dashboardData.batchCount, color: '#10B981' },
+      { name: 'Total Exams', value: dashboardData.examCount, color: '#F59E0B' },
+      { name: 'Open Doubts', value: dashboardData.doubtCount, color: '#EF4444' }
+    ];
+
+    const examStatusData = exams.reduce((acc, exam) => {
+      const status = new Date(exam.examDate) > new Date() ? 'upcoming' : 'completed';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const examChartData = [
+      { name: 'Upcoming', value: examStatusData.upcoming || 0, color: '#3B82F6' },
+      { name: 'Completed', value: examStatusData.completed || 0, color: '#10B981' }
+    ];
+
+    const noticeTypeData = notices.reduce((acc, notice) => {
+      const type = notice.isImportant ? 'Important' : 'Regular';
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {});
+
+    const noticeChartData = [
+      { name: 'Important', value: noticeTypeData.Important || 0, color: '#EF4444' },
+      { name: 'Regular', value: noticeTypeData.Regular || 0, color: '#6B7280' }
+    ];
+
+    return { statusData, examChartData, noticeChartData };
+  };
+
+  const { statusData, examChartData, noticeChartData } = getChartData();
+
+  if (loading) {
+    return (
+      <LakshyaLoader/>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full mx-4">
+          <div className="flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mx-auto mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <button className="relative p-2 rounded-full hover:bg-gray-100">
-            <Bell size={20} />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+          <h2 className="text-xl font-semibold text-center mb-2">Error Loading Dashboard</h2>
+          <p className="text-gray-600 text-center mb-4">{error}</p>
+          <button 
+            onClick={() => navigate('/login')}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Go to Login
           </button>
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white">
-              <User size={18} />
-            </div>
-          </div>
         </div>
       </div>
-      
-      <div className="p-6 overflow-auto h-full">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard Overview</h1>
-        
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Welcome back, {userData.name}!
+              </h1>
+              <p className="text-gray-600 mt-1">
+                {userData.role === 'admin' ? 'Admin Dashboard' : 'Student Dashboard'}
+              </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <Bell className="w-6 h-6 text-gray-600" />
+                {notifications.filter(n => !n.isRead).length > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {notifications.filter(n => !n.isRead).length}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <StatCard 
-            title="Total Students" 
-            value="1,280" 
-            trend="+12%" 
-            trendUp={true} 
-            icon={<Users className="text-indigo-500" />} 
-          />
-          <StatCard 
-            title="Courses" 
-            value="42" 
-            trend="+3" 
-            trendUp={true} 
-            icon={<Book className="text-green-500" />} 
-          />
-          <StatCard 
-            title="Assignments" 
-            value="156" 
-            trend="+24" 
-            trendUp={true} 
-            icon={<FileText className="text-orange-500" />} 
-          />
-          <StatCard 
-            title="Pass Rate" 
-            value="92%" 
-            trend="+5.4%" 
-            trendUp={true} 
-            icon={<Award className="text-purple-500" />} 
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Users</p>
+                <p className="text-2xl font-bold text-gray-900">{dashboardData.userCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Users className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+              <span className="text-sm text-green-600">Active learners</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Active Batches</p>
+                <p className="text-2xl font-bold text-gray-900">{dashboardData.batchCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <GraduationCap className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <Activity className="w-4 h-4 text-blue-500 mr-1" />
+              <span className="text-sm text-blue-600">Currently running</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Exams</p>
+                <p className="text-2xl font-bold text-gray-900">{dashboardData.examCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <Award className="w-6 h-6 text-yellow-600" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <Calendar className="w-4 h-4 text-orange-500 mr-1" />
+              <span className="text-sm text-orange-600">Assessments</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Open Doubts</p>
+                <p className="text-2xl font-bold text-gray-900">{dashboardData.doubtCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <HelpCircle className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <MessageCircle className="w-4 h-4 text-purple-500 mr-1" />
+              <span className="text-sm text-purple-600">Need attention</span>
+            </div>
+          </div>
         </div>
-        
+
+        {/* Admin Stats */}
+        {userData.role === 'admin' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Active Instructors</p>
+                  <p className="text-2xl font-bold text-gray-900">{dashboardData.instructorCount}</p>
+                </div>
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <UserCheck className="w-6 h-6 text-purple-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Active Notices</p>
+                  <p className="text-2xl font-bold text-gray-900">{dashboardData.noticeCount}</p>
+                </div>
+                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-indigo-600" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-700">Average Exam Scores</h2>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={examScoreData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="average" stroke="#6366F1" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Overview Chart */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Platform Overview</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={statusData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'white', 
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  }} 
+                />
+                <Bar dataKey="value" fill="#3B82F6" radius={4} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-          
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-700">Assignment Submissions</h2>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={submissionData}
-                  layout="vertical"
-                  barSize={20}
+
+          {/* Exam Status Chart */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Exam Status</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={examChartData}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={100}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}`}
                 >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="complete" fill="#10B981" name="Completed" />
-                  <Bar dataKey="pending" fill="#F59E0B" name="Pending" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+                  {examChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-700">Course Distribution</h2>
+
+        {/* Recent Activity Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Notices */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Recent Notices</h3>
+              <FileText className="w-5 h-5 text-gray-400" />
             </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={courseDistributionData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    nameKey="name"
-                    label
-                  >
-                    {courseDistributionData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-700">Recent Activities</h2>
-              <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View All</button>
-            </div>
-            <div className="space-y-4 overflow-y-auto h-64 pr-2">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-md">
-                  <div className="p-2 bg-indigo-100 rounded-md text-indigo-600">
-                    {activity.icon}
-                  </div>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {notices.slice(0, 5).map((notice) => (
+                <div key={notice._id} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className={`w-2 h-2 rounded-full mt-2 ${notice.isImportant ? 'bg-red-500' : 'bg-blue-500'}`}></div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800">{activity.activity}</p>
-                    <p className="text-xs text-gray-500">
-                      {activity.course} • {activity.time}
+                    <p className="font-medium text-gray-900 text-sm">{notice.title}</p>
+                    <p className="text-gray-600 text-xs mt-1">{notice.message.substring(0, 100)}...</p>
+                    <p className="text-gray-400 text-xs mt-1">
+                      {new Date(notice.sentAt).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
               ))}
+              {notices.length === 0 && (
+                <p className="text-gray-500 text-center py-4">No notices available</p>
+              )}
             </div>
           </div>
-          
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-700">Discussion Forum</h2>
-              <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View All</button>
-            </div>
-            <div className="space-y-4 overflow-y-auto h-64 pr-2">
-              <div className="p-3 bg-gray-50 rounded-md">
-                <div className="flex items-center space-x-2 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">S</div>
-                  <div>
-                    <p className="text-sm font-medium">Sarah Johnson</p>
-                    <p className="text-xs text-gray-500">Physics • 1 hour ago</p>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-700">Can someone explain the concept of quantum entanglement?</p>
-                <div className="flex items-center mt-2 text-xs text-gray-500">
-                  <span className="flex items-center mr-3"><MessageSquare size={12} className="mr-1" /> 5 replies</span>
-                  <span className="flex items-center"><Award size={12} className="mr-1" /> 2 solutions</span>
-                </div>
-              </div>
-              
-              <div className="p-3 bg-gray-50 rounded-md">
-                <div className="flex items-center space-x-2 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">M</div>
-                  <div>
-                    <p className="text-sm font-medium">Michael Chen</p>
-                    <p className="text-xs text-gray-500">Math • 3 hours ago</p>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-700">Having trouble with the differentiation formulas in calculus...</p>
-                <div className="flex items-center mt-2 text-xs text-gray-500">
-                  <span className="flex items-center mr-3"><MessageSquare size={12} className="mr-1" /> 7 replies</span>
-                  <span className="flex items-center"><Award size={12} className="mr-1" /> 1 solution</span>
-                </div>
-              </div>
-              
-              <div className="p-3 bg-gray-50 rounded-md">
-                <div className="flex items-center space-x-2 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">R</div>
-                  <div>
-                    <p className="text-sm font-medium">Rachel Kim</p>
-                    <p className="text-xs text-gray-500">Computer Science • 5 hours ago</p>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-700">Could someone explain recursion in programming?</p>
-                <div className="flex items-center mt-2 text-xs text-gray-500">
-                  <span className="flex items-center mr-3"><MessageSquare size={12} className="mr-1" /> 12 replies</span>
-                  <span className="flex items-center"><Award size={12} className="mr-1" /> 3 solutions</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Bottom Sections */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-700">Upcoming Exams</h2>
-              <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View Calendar</button>
-            </div>
-            <div className="divide-y">
-              {upcomingExams.map((exam) => (
-                <div key={exam.id} className="py-3 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-purple-100 rounded-md text-purple-600">
-                      <FileText size={16} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{exam.subject}</p>
-                      <p className="text-xs text-gray-500">{exam.date} • {exam.time}</p>
-                    </div>
-                  </div>
-                  <button className="p-1 text-gray-400 hover:text-indigo-600">
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-700">Pending Assignments</h2>
-              <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View All</button>
-            </div>
-            <div className="divide-y">
-              {pendingAssignments.map((assignment) => (
-                <div key={assignment.id} className="py-3 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-green-100 rounded-md text-green-600">
-                      <Edit3 size={16} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{assignment.title}</p>
-                      <p className="text-xs text-gray-500">{assignment.course} • Due {assignment.deadline}</p>
-                    </div>
-                  </div>
-                  <button className="p-1 text-gray-400 hover:text-indigo-600">
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-700">Online Examination Results</h2>
-            <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View Complete Results</button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-3">A</div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">Alex Johnson</div>
-                        <div className="text-sm text-gray-500">ID: STU2025001</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">Physics</div>
-                    <div className="text-xs text-gray-500">Midterm Exam</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">May 18, 2025</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">87/100</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Passed</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button className="text-indigo-600 hover:text-indigo-900">View Details</button>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center text-pink-600 mr-3">S</div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">Sara Williams</div>
-                        <div className="text-sm text-gray-500">ID: STU2025042</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">Math</div>
-                    <div className="text-xs text-gray-500">Quiz 2</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">May 19, 2025</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">92/100</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Passed</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button className="text-indigo-600 hover:text-indigo-900">View Details</button>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 mr-3">J</div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">James Lee</div>
-                        <div className="text-sm text-gray-500">ID: STU2025113</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">Biology</div>
-                    <div className="text-xs text-gray-500">Final Exam</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">May 20, 2025</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">65/100</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Average</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button className="text-indigo-600 hover:text-indigo-900">View Details</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
-// Component for stats cards
-const StatCard = ({ title, value, trend, trendUp, icon }) => {
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="text-2xl font-bold mt-1 text-gray-800">{value}</p>
+          {/* Recent Notifications */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
+              <Bell className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {notifications.slice(0, 5).map((notification) => (
+                <div 
+                  key={notification._id} 
+                  className={`flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer ${
+                    !notification.isRead ? 'bg-blue-50 border-l-2 border-blue-500' : ''
+                  }`}
+                  onClick={() => !notification.isRead && markNotificationAsRead(notification._id)}
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900 text-sm">
+                      {notification.type.replace('_', ' ').toUpperCase()}
+                    </p>
+                    <p className="text-gray-600 text-xs mt-1">
+                      From: {notification.sender?.name || 'System'}
+                    </p>
+                    <p className="text-gray-400 text-xs mt-1">
+                      {new Date(notification.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  {!notification.isRead && (
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                  )}
+                </div>
+              ))}
+              {notifications.length === 0 && (
+                <p className="text-gray-500 text-center py-4">No notifications</p>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="p-3 bg-gray-50 rounded-md">
-          {icon}
-        </div>
-      </div>
-      <div className="mt-2 flex items-center">
-        <span className={`text-xs font-medium ${trendUp ? 'text-green-500' : 'text-red-500'}`}>
-          {trend}
-        </span>
-        <span className="text-xs text-gray-500 ml-1">vs last month</span>
+
+        {/* Upcoming Exams */}
+        {exams.length > 0 && (
+          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Upcoming Exams</h3>
+              <Calendar className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {exams
+                .filter(exam => new Date(exam.examDate) > new Date())
+                .slice(0, 6)
+                .map((exam) => (
+                  <div key={exam._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <h4 className="font-medium text-gray-900">{exam.title}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{exam.subject}</p>
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-xs text-gray-500">
+                        {new Date(exam.examDate).toLocaleDateString()}
+                      </span>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {exam.duration} min
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default Dashboard;
-

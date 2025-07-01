@@ -11,6 +11,7 @@ const Sidebar = ({ onCollapseChange }) => {
     { name: 'Dashboard', path: '/', icon: <FaTachometerAlt />, isParent: true },
     { name: 'Exam', path: '/admin-dashboard/exam', icon: <FaPenFancy />, isParent: false },
     { name: 'Results', path: '/admin-dashboard/results', icon: <FaMedal />, isParent: false },
+    { name: 'Results', path: '/admin-dashboard/ResultList', icon: <FaMedal />, isParent: false },
     { name: 'Students', path: '/admin-dashboard/users', icon: <FaUserGraduate />, isParent: false },
     { name: 'Courses', path: '/admin-dashboard/Courses', icon: <FaBookOpen />, isParent: false },
     { name: 'Instructors', path: '/admin-dashboard/Instructors', icon: <FaChalkboardTeacher />, isParent: false },
@@ -21,13 +22,15 @@ const Sidebar = ({ onCollapseChange }) => {
   ];
 
   const userMenuItems = [
-    { name: 'Profile', path: '/employee-dashboard/profile', icon: <FaUserCircle />, isParent: false },
+    { name: 'Dashboard', path: '/employee-dashboard/UserDashboard', icon: <FaTachometerAlt />, isParent: false },
+   
     { name: 'My Exams', path: '/employee-dashboard/MyExams', icon: <FaClipboardCheck />, isParent: false },
     { name: 'My Result', path: '/employee-dashboard/MyResult', icon: <FaChartBar />, isParent: false },
     { name: 'Courses', path: '/employee-dashboard/MyCourses', icon: <FaBook />, isParent: false },
     { name: 'Instructors', path: '/employee-dashboard/MyInstructors', icon: <FaUserTie />, isParent: false },
     { name: 'Discussions', path: '/employee-dashboard/Discussions', icon: <FaComments />, isParent: false },
     { name: 'Notice', path: '/employee-dashboard/MyNotice', icon: <FaBullhorn />, isParent: false },
+     { name: 'Profile', path: '/employee-dashboard/profile', icon: <FaUserCircle />, isParent: false },
     { name: 'Logout', path: '/logout', icon: <FaSignOutAlt />, isParent: true }
   ];
 
