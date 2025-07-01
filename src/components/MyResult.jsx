@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../utils/api';
 import { format } from 'date-fns';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  AreaChart, Area
+} from 'recharts';
+import { 
+  Trophy, Clock, Target, TrendingUp, Award, BookOpen, AlertCircle, 
+  CheckCircle, XCircle, Star, MessageSquare, ThumbsUp, Brain, 
+  BarChart3, PieChart as PieChartIcon, Activity, Users, Calendar,
+  ArrowLeft, Eye, FileText, Zap, Shield, Lightbulb, Timer,
+  ChevronRight, Medal, Gauge
+} from 'lucide-react';
 
 const MyResult = () => {
   const [exams, setExams] = useState([]);
@@ -59,65 +71,65 @@ const MyResult = () => {
   }, []);
 
   // Fetch detailed attempt data
-// Fetch detailed attempt data
-const handleShowResult = async (examId) => {
-  try {
-    setLoading(true);
-    const response = await axiosInstance.get(`/studentAnswers/attempt/${examId}`);
-    if (response.data.success) {
-      const attempt = response.data.attempt;
-      
-      // Ensure analytics data exists
-      const analytics = attempt.performanceAnalytics || {};
-      
-      // Calculate correct/incorrect counts if not present
-      if (!analytics.correctCount || !analytics.incorrectCount) {
-        let correct = 0;
-        let incorrect = 0;
+  const handleShowResult = async (examId) => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get(`/studentAnswers/attempt/${examId}`);
+      if (response.data.success) {
+        const attempt = response.data.attempt;
         
-        attempt.answers.forEach(answer => {
-          const question = answer.questionId;
-          if (!question) return;
+        // Ensure analytics data exists
+        const analytics = attempt.performanceAnalytics || {};
+        
+        // Calculate correct/incorrect counts if not present
+        if (!analytics.correctCount || !analytics.incorrectCount) {
+          let correct = 0;
+          let incorrect = 0;
           
-          const selected = (answer.selectedOptions || []).sort().join(',');
-          const correctAnswers = (question.correctAnswers || []).sort().join(',');
-          
-          // Only count answers that were attempted
-          if (answer.attemptStatus === 'attempted' || answer.attemptStatus === 'marked_for_review') {
-            if (selected === correctAnswers && selected !== '') {
-              correct++;
-            } else {
-              incorrect++;
+          attempt.answers.forEach(answer => {
+            const question = answer.questionId;
+            if (!question) return;
+            
+            const selected = (answer.selectedOptions || []).sort().join(',');
+            const correctAnswers = (question.correctAnswers || []).sort().join(',');
+            
+            // Only count answers that were attempted
+            if (answer.attemptStatus === 'attempted' || answer.attemptStatus === 'marked_for_review') {
+              if (selected === correctAnswers && selected !== '') {
+                correct++;
+              } else {
+                incorrect++;
+              }
             }
-          }
+          });
+          
+          analytics.correctCount = correct;
+          analytics.incorrectCount = incorrect;
+          analytics.accuracy = attempt.answers.length > 0 
+            ? (correct / attempt.answers.length) * 100 
+            : 0;
+        }
+        
+        setSelectedAttempt({
+          ...attempt,
+          performanceAnalytics: analytics
         });
         
-        analytics.correctCount = correct;
-        analytics.incorrectCount = incorrect;
-        analytics.accuracy = attempt.answers.length > 0 
-          ? (correct / attempt.answers.length) * 100 
-          : 0;
+        setFeedback({
+          mood: attempt.feedback?.mood || '',
+          comments: attempt.feedback?.comments || '',
+          rating: attempt.feedback?.rating || null,
+          confidenceLevel: attempt.feedback?.confidenceLevel || null,
+        });
       }
-      
-      setSelectedAttempt({
-        ...attempt,
-        performanceAnalytics: analytics
-      });
-      
-      setFeedback({
-        mood: attempt.feedback?.mood || '',
-        comments: attempt.feedback?.comments || '',
-        rating: attempt.feedback?.rating || null,
-        confidenceLevel: attempt.feedback?.confidenceLevel || null,
-      });
+    } catch (err) {
+      setError('Error fetching attempt details: ' + err.message);
+      console.error('Error in handleShowResult:', err);
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    setError('Error fetching attempt details: ' + err.message);
-    console.error('Error in handleShowResult:', err);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
   // Handle feedback submission
   const handleFeedbackSubmit = async (e) => {
     e.preventDefault();
@@ -160,13 +172,11 @@ const handleShowResult = async (examId) => {
     return Array(5)
       .fill(0)
       .map((_, i) => (
-        <span
+        <Star
           key={i}
-          className={i < rating ? 'text-yellow-400 cursor-pointer' : 'text-gray-300 cursor-pointer'}
+          className={`w-5 h-5 ${i < rating ? 'text-yellow-400 fill-current' : 'text-gray-300'} ${interactive ? 'cursor-pointer hover:scale-110 transition-transform' : ''}`}
           onClick={interactive ? () => setFeedback({ ...feedback, rating: i + 1 }) : null}
-        >
-          ★
-        </span>
+        />
       ));
   };
 
@@ -184,254 +194,656 @@ const handleShowResult = async (examId) => {
     return sections.join(', ');
   };
 
+  // Generate chart data
+  const generateChartData = () => {
+    if (!selectedAttempt) return null;
+
+    const correct = selectedAttempt.performanceAnalytics?.correctCount || 0;
+    const incorrect = selectedAttempt.performanceAnalytics?.incorrectCount || 0;
+    const unattempted = selectedAttempt.totalQuestions - (correct + incorrect);
+
+    return {
+      pieData: [
+        { name: 'Correct', value: correct, color: '#10B981' },
+        { name: 'Incorrect', value: incorrect, color: '#EF4444' },
+        { name: 'Unattempted', value: unattempted, color: '#6B7280' }
+      ],
+      performanceData: [
+        { subject: 'Accuracy', score: selectedAttempt.performanceAnalytics?.accuracy || 0 },
+        { subject: 'Speed', score: Math.min(100, (selectedAttempt.questionsAttempted / selectedAttempt.totalQuestions) * 100) },
+        { subject: 'Completion', score: (selectedAttempt.questionsAttempted / selectedAttempt.totalQuestions) * 100 },
+      ],
+      timeData: selectedAttempt.answers?.map((answer, index) => ({
+        question: `Q${index + 1}`,
+        time: answer.timeSpentSeconds || 0,
+        status: answer.attemptStatus
+      })) || []
+    };
+  };
+
+  const chartData = selectedAttempt ? generateChartData() : null;
+
+  const getScoreColor = (score) => {
+    if (score >= 80) return 'text-green-500';
+    if (score >= 60) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
+  const getGradeFromScore = (score) => {
+    if (score >= 90) return { grade: 'A+', color: 'bg-green-500' };
+    if (score >= 80) return { grade: 'A', color: 'bg-green-400' };
+    if (score >= 70) return { grade: 'B', color: 'bg-blue-500' };
+    if (score >= 60) return { grade: 'C', color: 'bg-yellow-500' };
+    if (score >= 50) return { grade: 'D', color: 'bg-orange-500' };
+    return { grade: 'F', color: 'bg-red-500' };
+  };
+
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">My Exam Results</h1>
-
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+      <div className="container mx-auto p-6">
+        {/* Header Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+                My Exam Results
+              </h1>
+              <p className="text-gray-600">Track your performance and analyze your results</p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="bg-white rounded-lg p-4 shadow-lg">
+                <BarChart3 className="w-8 h-8 text-indigo-600" />
+              </div>
+            </div>
+          </div>
         </div>
-      )}
 
-      {loading ? (
-        <div className="text-center text-gray-600">Loading...</div>
-      ) : (
-        <>
-          {/* Exams List */}
-          {!selectedAttempt ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {exams.length === 0 ? (
-                <p className="text-gray-600">No exams found.</p>
-              ) : (
-                exams.map((exam) => (
-                  <div
-                    key={exam._id}
-                    className="bg-white shadow-md rounded-lg p-6 hover:shadow-lg transition"
-                  >
-                    <h2 className="text-xl font-semibold text-gray-800">{exam.title}</h2>
-                    <p className="text-gray-600 mb-2">{exam.description}</p>
-                    <p className="text-sm text-gray-500">
-                      Start: {formatDate(exam.startTime)}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Duration: {exam.duration} minutes
-                    </p>
-                    {attemptStatus[exam._id] ? (
-                      <button
-                        onClick={() => handleShowResult(exam._id)}
-                        className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                      >
-                        Show Result
-                      </button>
-                    ) : (
-                      <p className="mt-4 text-sm text-gray-500">Not attempted</p>
-                    )}
-                  </div>
-                ))
-              )}
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded-lg">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
+              <p className="text-red-700">{error}</p>
             </div>
-          ) : (
-            /* Detailed Result View */
-            <div className="bg-white shadow-md rounded-lg p-8">
-              <button
-                onClick={() => setSelectedAttempt(null)}
-                className="mb-4 text-blue-500 hover:underline"
-              >
-                ← Back to Exams
-              </button>
-              <h2 className="text-2xl font-bold mb-4">{selectedAttempt.examId.title}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <p><strong>Score:</strong> {selectedAttempt.score}</p>
-                  <p><strong>Total Questions:</strong> {selectedAttempt.totalQuestions}</p>
-                  <p><strong>Questions Attempted:</strong> {selectedAttempt.questionsAttempted}</p>
-                  <p><strong>Correct Answers:</strong> {selectedAttempt.performanceAnalytics?.correctCount ?? 'Calculating...'}</p>
-  <p><strong>Incorrect Answers:</strong> {selectedAttempt.performanceAnalytics?.incorrectCount ?? 'Calculating...'}</p>
-                  <p><strong>Duration:</strong> {selectedAttempt.durationMinutes || 'Calculating...'} minutes</p>
-                </div>
-                <div>
-                  <p><strong>Accuracy:</strong> {selectedAttempt.performanceAnalytics?.accuracy?.toFixed(2) ?? 0}%</p>
-                  <p><strong>Avg. Time per Question:</strong> {(selectedAttempt.performanceAnalytics?.timeManagement || 0).toFixed(2)} seconds</p>
-                  <p><strong>Strong Sections:</strong> {formatSections(selectedAttempt.performanceAnalytics?.strongSections)}</p>
-                  <p><strong>Weak Sections:</strong> {formatSections(selectedAttempt.performanceAnalytics?.weakSections)}</p>
-                </div>
-              </div>
+          </div>
+        )}
 
-              {/* Cheating Logs */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-2">Cheating Logs</h3>
-                <p><strong>Total Attempts:</strong> {selectedAttempt.cheatingAttempts || 0}</p>
-                {selectedAttempt.cheatingLogs?.length > 0 ? (
-                  <ul className="list-disc pl-5">
-                    {selectedAttempt.cheatingLogs.map((log, index) => (
-                      <li key={index} className="text-sm text-gray-600">
-                        {log.type} at {formatDate(log.timestamp)}: {log.description || 'No description'}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-gray-600">No cheating attempts detected.</p>
-                )}
-              </div>
-
-              {/* Feedback Display */}
-              {isFeedbackSubmitted && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold mb-2">Your Feedback</h3>
-                  <p><strong>Mood:</strong> {selectedAttempt.feedback.mood || 'N/A'}</p>
-                  <p><strong>Rating:</strong> {renderStars(selectedAttempt.feedback.rating)}</p>
-                  <p><strong>Confidence Level:</strong> {selectedAttempt.feedback.confidenceLevel || 'N/A'}</p>
-                  <p><strong>Comments:</strong> {selectedAttempt.feedback.comments || 'None'}</p>
-                  <p><strong>Submitted:</strong> {selectedAttempt.feedback.timestamp ? formatDate(selectedAttempt.feedback.timestamp) : 'N/A'}</p>
-                </div>
-              )}
-
-              {/* Feedback Submission Form */}
-              {!isFeedbackSubmitted && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold mb-2">Submit Feedback</h3>
-                  <form onSubmit={handleFeedbackSubmit} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Mood</label>
-                      <select
-                        value={feedback.mood}
-                        onChange={(e) => setFeedback({ ...feedback, mood: e.target.value })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                        required
-                      >
-                        <option value="">Select mood</option>
-                        {['happy', 'sad', 'neutral', 'confused', 'stressed', 'confident'].map((mood) => (
-                          <option key={mood} value={mood}>
-                            {mood.charAt(0).toUpperCase() + mood.slice(1)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Rating</label>
-                      <div className="mt-1">{renderStars(feedback.rating || 0, true)}</div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Confidence Level</label>
-                      <select
-                        value={feedback.confidenceLevel}
-                        onChange={(e) => setFeedback({ ...feedback, confidenceLevel: e.target.value })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                        required
-                      >
-                        <option value="">Select confidence level</option>
-                        {['low', 'medium', 'high'].map((level) => (
-                          <option key={level} value={level}>
-                            {level.charAt(0).toUpperCase() + level.slice(1)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Comments</label>
-                      <textarea
-                        value={feedback.comments}
-                        onChange={(e) => setFeedback({ ...feedback, comments: e.target.value })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                        rows="4"
-                        maxLength="500"
-                        placeholder="Share your thoughts about the exam..."
-                      ></textarea>
-                    </div>
-                    <button
-                      type="submit"
-                      className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-                      disabled={loading || !selectedAttempt?.examId?._id}
-                    >
-                      {loading ? 'Submitting...' : 'Submit Feedback'}
-                    </button>
-                  </form>
-                </div>
-              )}
-
-              {/* Question-wise Analysis */}
-              <h3 className="text-lg font-semibold mb-4">Question-wise Analysis</h3>
-              {selectedAttempt.answers.map((answer, index) => {
-                const question = answer.questionId;
-                const explanation = selectedAttempt.questionExplanations?.find(
-                  (exp) => exp.questionId.toString() === question._id.toString()
-                );
-                const isCorrect =
-                  answer.selectedOptions?.sort().join(',') ===
-                  question.correctAnswers?.sort().join(',');
-
-                return (
-                  <div key={answer._id || index} className="mb-4 p-4 bg-gray-50 rounded">
-                    <p className="font-medium">
-                      Q{index + 1}: {question.questionText}
-                    </p>
-                    {question.imageUrl && (
-                      <img
-                        src={question.imageUrl}
-                        alt="Question image"
-                        className="mt-2 max-w-full h-auto rounded"
-                        onError={(e) => (e.target.src = '/placeholder-image.jpg')}
-                      />
-                    )}
-                    <p>
-                      <strong>Your Answer:</strong>{' '}
-                      {answer.selectedOptions?.length > 0
-                        ? answer.selectedOptions
-                            .map((opt) => question.options[opt]?.optionText || `Option ${opt}`)
-                            .join(', ')
-                        : 'Not answered'}
-                    </p>
-                    {answer.selectedOptions?.map((opt, i) => (
-                      question.options[opt]?.imageUrl && (
-                        <img
-                          key={i}
-                          src={question.options[opt].imageUrl}
-                          alt={`Option ${opt} image`}
-                          className="mt-2 max-w-xs h-auto rounded"
-                          onError={(e) => (e.target.src = '/placeholder-image.jpg')}
-                        />
-                      )
-                    ))}
-                    <p>
-                      <strong>Correct Answer:</strong>{' '}
-                      {question.correctAnswers
-                        ?.map((opt) => question.options[opt]?.optionText || `Option ${opt}`)
-                        ?.join(', ')}
-                    </p>
-                    {question.correctAnswers?.map((opt, i) => (
-                      question.options[opt]?.imageUrl && (
-                        <img
-                          key={i}
-                          src={question.options[opt].imageUrl}
-                          alt={`Correct option ${opt} image`}
-                          className="mt-2 max-w-xs h-auto rounded"
-                          onError={(e) => (e.target.src = '/placeholder-image.jpg')}
-                        />
-                      )
-                    ))}
-                    <p>
-                      <strong>Status:</strong>{' '}
-                      <span className={isCorrect ? 'text-green-600' : 'text-red-600'}>
-                        {isCorrect ? 'Correct' : 'Incorrect'}
-                      </span>
-                    </p>
-                    <p><strong>Time Spent:</strong> {answer.timeSpentSeconds || 0} seconds</p>
-                    <p><strong>Attempt Status:</strong> {answer.attemptStatus || 'N/A'}</p>
-                    <p><strong>Section:</strong> {answer.section || 'N/A'}</p>
-                    {explanation?.explanation && (
-                      <div className="mt-2 p-2 bg-blue-50 rounded">
-                        <p className="font-medium">Explanation:</p>
-                        <p>{explanation.explanation}</p>
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <span className="ml-3 text-gray-600">Loading amazing results...</span>
+          </div>
+        ) : (
+          <>
+            {/* Exams List */}
+            {!selectedAttempt ? (
+              <div className="space-y-6">
+                {/* Stats Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                  <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Total Exams</p>
+                        <p className="text-2xl font-bold text-gray-900">{exams.length}</p>
                       </div>
-                    )}
+                      <BookOpen className="w-8 h-8 text-indigo-600" />
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
+                  <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Completed</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          {Object.values(attemptStatus).filter(Boolean).length}
+                        </p>
+                      </div>
+                      <CheckCircle className="w-8 h-8 text-green-600" />
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Pending</p>
+                        <p className="text-2xl font-bold text-orange-600">
+                          {Object.values(attemptStatus).filter(status => !status).length}
+                        </p>
+                      </div>
+                      <Clock className="w-8 h-8 text-orange-600" />
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                        <p className="text-2xl font-bold text-purple-600">
+                          {exams.length > 0 ? Math.round((Object.values(attemptStatus).filter(Boolean).length / exams.length) * 100) : 0}%
+                        </p>
+                      </div>
+                      <TrendingUp className="w-8 h-8 text-purple-600" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Exams Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {exams.length === 0 ? (
+                    <div className="col-span-full text-center py-12">
+                      <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 text-lg">No exams found</p>
+                    </div>
+                  ) : (
+                    exams.map((exam) => (
+                      <div
+                        key={exam._id}
+                        className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 hover:scale-105"
+                      >
+                        <div className="flex items-start justify-between mb-4">
+                          <h2 className="text-xl font-bold text-gray-800 leading-tight">{exam.title}</h2>
+                          {attemptStatus[exam._id] ? (
+                            <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                              Completed
+                            </div>
+                          ) : (
+                            <div className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                              Pending
+                            </div>
+                          )}
+                        </div>
+                        
+                        <p className="text-gray-600 mb-4 line-clamp-2">{exam.description}</p>
+                        
+                        <div className="space-y-2 mb-4">
+                          <div className="flex items-center text-sm text-gray-500">
+                            <Calendar className="w-4 h-4 mr-2" />
+                            {formatDate(exam.startTime)}
+                          </div>
+                          <div className="flex items-center text-sm text-gray-500">
+                            <Timer className="w-4 h-4 mr-2" />
+                            {exam.duration} minutes
+                          </div>
+                        </div>
+
+                        {attemptStatus[exam._id] ? (
+                          <button
+                            onClick={() => handleShowResult(exam._id)}
+                            className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 flex items-center justify-center space-x-2 font-medium"
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span>View Results</span>
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <div className="w-full bg-gray-100 text-gray-500 px-4 py-3 rounded-lg text-center font-medium">
+                            Not Attempted
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Detailed Result View */
+              <div className="space-y-6">
+                {/* Back Button */}
+                <button
+                  onClick={() => setSelectedAttempt(null)}
+                  className="flex items-center text-indigo-600 hover:text-indigo-700 font-medium transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Exams
+                </button>
+
+                {/* Result Header */}
+                <div className="bg-white rounded-xl p-8 shadow-lg border border-gray-100">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="text-3xl font-bold text-gray-800">{selectedAttempt.examId.title}</h2>
+                      <p className="text-gray-600 mt-1">Detailed Performance Analysis</p>
+                    </div>
+                    <div className="text-right">
+                      {(() => {
+                        const { grade, color } = getGradeFromScore(selectedAttempt.score);
+                        return (
+                          <div className={`${color} text-white px-4 py-2 rounded-lg font-bold text-2xl`}>
+                            {grade}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Score Overview */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="text-center">
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
+                        <Trophy className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Overall Score</p>
+                        <p className={`text-3xl font-bold ${getScoreColor(selectedAttempt.score)}`}>
+                          {selectedAttempt.score}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6">
+                        <Target className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Accuracy</p>
+                        <p className="text-3xl font-bold text-green-600">
+                          {(selectedAttempt.performanceAnalytics?.accuracy || 0).toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl p-6">
+                        <CheckCircle className="w-8 h-8 text-purple-600 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Completed</p>
+                        <p className="text-3xl font-bold text-purple-600">
+                          {selectedAttempt.questionsAttempted}/{selectedAttempt.totalQuestions}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6">
+                        <Clock className="w-8 h-8 text-orange-600 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Duration</p>
+                        <p className="text-3xl font-bold text-orange-600">
+                          {selectedAttempt.durationMinutes || 'N/A'}min
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Charts Section */}
+                {chartData && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Performance Distribution */}
+                    <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                        <PieChartIcon className="w-5 h-5 mr-2 text-indigo-600" />
+                        Answer Distribution
+                      </h3>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={chartData.pieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={5}
+                            dataKey="value"
+                          >
+                            {chartData.pieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="flex justify-center space-x-4 mt-4">
+                        {chartData.pieData.map((item) => (
+                          <div key={item.name} className="flex items-center">
+                            <div 
+                              className="w-3 h-3 rounded-full mr-2" 
+                              style={{ backgroundColor: item.color }}
+                            ></div>
+                            <span className="text-sm text-gray-600">{item.name}: {item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-center mt-4">
+                        <span className="text-sm text-gray-600">Total Score: </span>
+                        <span className={`text-sm font-bold ${getScoreColor(selectedAttempt.score)}`}>
+                          {selectedAttempt.score}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Performance Radar */}
+                    <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                        <Activity className="w-5 h-5 mr-2 text-indigo-600" />
+                        Performance Radar
+                      </h3>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <RadarChart data={chartData.performanceData}>
+                          <PolarGrid />
+                          <PolarAngleAxis dataKey="subject" />
+                          <PolarRadiusAxis domain={[0, 100]} />
+                          <Radar
+                            name="Performance"
+                            dataKey="score"
+                            stroke="#6366f1"
+                            fill="#6366f1"
+                            fillOpacity={0.3}
+                          />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Time Analysis */}
+                    <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 lg:col-span-2">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                        <BarChart3 className="w-5 h-5 mr-2 text-indigo-600" />
+                        Time Spent Per Question
+                      </h3>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={chartData.timeData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="question" />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="time" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                {/* Detailed Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                      <Brain className="w-5 h-5 mr-2 text-indigo-600" />
+                      Performance Analytics
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Correct Answers</span>
+                        <span className="font-bold text-green-600">
+                          {selectedAttempt.performanceAnalytics?.correctCount ?? 'Calculating...'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Incorrect Answers</span>
+                        <span className="font-bold text-red-600">
+                          {selectedAttempt.performanceAnalytics?.incorrectCount ?? 'Calculating...'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Avg. Time per Question</span>
+                        <span className="font-bold text-blue-600">
+                          {(selectedAttempt.performanceAnalytics?.timeManagement || 0).toFixed(2)}s
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Strong Sections</span>
+                        <span className="font-bold text-green-600">
+                          {formatSections(selectedAttempt.performanceAnalytics?.strongSections)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Weak Sections</span>
+                        <span className="font-bold text-orange-600">
+                          {formatSections(selectedAttempt.performanceAnalytics?.weakSections)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Security Report */}
+                  <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                      <Shield className="w-5 h-5 mr-2 text-indigo-600" />
+                      Security Report
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Violation Attempts</span>
+                        <span className={`font-bold ${selectedAttempt.cheatingAttempts > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {selectedAttempt.cheatingAttempts || 0}
+                        </span>
+                      </div>
+                      {selectedAttempt.cheatingLogs?.length > 0 ? (
+                        <div className="bg-red-50 rounded-lg p-4">
+                          <h4 className="font-medium text-red-800 mb-2">Security Logs:</h4>
+                          <ul className="space-y-1">
+                            {selectedAttempt.cheatingLogs.map((log, index) => (
+                              <li key={index} className="text-sm text-red-700">
+                                {log.type} - {formatDate(log.timestamp)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : (
+                        <div className="bg-green-50 rounded-lg p-4">
+                          <p className="text-green-700 text-sm">✓ No security violations detected</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feedback Section */}
+                {isFeedbackSubmitted ? (
+                  <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                      <MessageSquare className="w-5 h-5 mr-2 text-indigo-600" />
+                      Your Feedback
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <p className="text-sm text-gray-600 mb-1">Mood</p>
+                        <p className="font-medium capitalize">{selectedAttempt.feedback.mood || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600 mb-1">Rating</p>
+                        <div className="flex">{renderStars(selectedAttempt.feedback.rating)}</div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600 mb-1">Confidence Level</p>
+                        <p className="font-medium capitalize">{selectedAttempt.feedback.confidenceLevel || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600 mb-1">Submitted</p>
+                        <p className="font-medium">{selectedAttempt.feedback.timestamp ? formatDate(selectedAttempt.feedback.timestamp) : 'N/A'}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <p className="text-sm text-gray-600 mb-1">Comments</p>
+                        <p className="font-medium">{selectedAttempt.feedback.comments || 'No comments provided'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                      <MessageSquare className="w-5 h-5 mr-2 text-indigo-600" />
+                      Submit Your Feedback
+                    </h3>
+                    <form onSubmit={handleFeedbackSubmit} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">How did you feel?</label>
+                          <select
+                            value={feedback.mood}
+                            onChange={(e) => setFeedback({ ...feedback, mood: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                            required
+                          >
+                            <option value="">Select your mood</option>
+                            {['happy', 'sad', 'neutral', 'confused', 'stressed', 'confident'].map((mood) => (
+                              <option key={mood} value={mood}>
+                                {mood.charAt(0).toUpperCase() + mood.slice(1)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Confidence Level</label>
+                          <select
+                            value={feedback.confidenceLevel}
+                            onChange={(e) => setFeedback({ ...feedback, confidenceLevel: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                            required
+                          >
+                            <option value="">Select confidence level</option>
+                            {['low', 'medium', 'high'].map((level) => (
+                              <option key={level} value={level}>
+                                {level.charAt(0).toUpperCase() + level.slice(1)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Rate your experience</label>
+                        <div className="flex space-x-1">{renderStars(feedback.rating || 0, true)}</div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Additional Comments</label>
+                        <textarea
+                          value={feedback.comments}
+                          onChange={(e) => setFeedback({ ...feedback, comments: e.target.value })}
+                          className="w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          rows="4"
+                          maxLength="500"
+                          placeholder="Share your thoughts about the exam experience..."
+                        ></textarea>
+                        <p className="text-xs text-gray-500 mt-1">{feedback.comments.length}/500 characters</p>
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all duration-200 font-medium flex items-center justify-center space-x-2"
+                        disabled={loading || !selectedAttempt?.examId?._id}
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                        <span>{loading ? 'Submitting...' : 'Submit Feedback'}</span>
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* Question-wise Analysis */}
+                <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                  <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
+                    <Lightbulb className="w-5 h-5 mr-2 text-indigo-600" />
+                    Question-wise Analysis
+                  </h3>
+                  <div className="space-y-6">
+                    {selectedAttempt.answers.map((answer, index) => {
+                      const question = answer.questionId;
+                      const explanation = selectedAttempt.questionExplanations?.find(
+                        (exp) => exp.questionId.toString() === question._id.toString()
+                      );
+                      const isCorrect =
+                        answer.selectedOptions?.sort().join(',') ===
+                        question.correctAnswers?.sort().join(',');
+
+                      return (
+                        <div key={answer._id || index} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                          <div className="flex items-start justify-between mb-4">
+                            <h4 className="font-semibold text-gray-800 flex items-center">
+                              <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-sm mr-3">
+                                Q{index + 1}
+                              </span>
+                              {question.questionText}
+                            </h4>
+                            <div className="flex items-center space-x-2">
+                              {isCorrect ? (
+                                <div className="flex items-center text-green-600">
+                                  <CheckCircle className="w-5 h-5 mr-1" />
+                                  <span className="text-sm font-medium">Correct</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center text-red-600">
+                                  <XCircle className="w-5 h-5 mr-1" />
+                                  <span className="text-sm font-medium">Incorrect</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {question.imageUrl && (
+                            <div className="mb-4">
+                              <img
+                                src={question.imageUrl}
+                                alt="Question image"
+                                className="max-w-full h-auto rounded-lg border border-gray-200"
+                                onError={(e) => (e.target.src = '/placeholder-image.jpg')}
+                              />
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Your Answer</p>
+                              <p className="text-gray-800">
+                                {answer.selectedOptions?.length > 0
+                                  ? answer.selectedOptions
+                                      .map((opt) => question.options[opt]?.optionText || `Option ${opt}`)
+                                      .join(', ')
+                                  : 'Not answered'}
+                              </p>
+                              {answer.selectedOptions?.map((opt, i) => (
+                                question.options[opt]?.imageUrl && (
+                                  <img
+                                    key={i}
+                                    src={question.options[opt].imageUrl}
+                                    alt={`Option ${opt} image`}
+                                    className="mt-2 max-w-xs h-auto rounded border border-gray-200"
+                                    onError={(e) => (e.target.src = '/placeholder-image.jpg')}
+                                  />
+                                )
+                              ))}
+                            </div>
+
+                            <div className="bg-green-50 rounded-lg p-4">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Correct Answer</p>
+                              <p className="text-green-800">
+                                {question.correctAnswers
+                                  ?.map((opt) => question.options[opt]?.optionText || `Option ${opt}`)
+                                  ?.join(', ')}
+                              </p>
+                              {question.correctAnswers?.map((opt, i) => (
+                                question.options[opt]?.imageUrl && (
+                                  <img
+                                    key={i}
+                                    src={question.options[opt].imageUrl}
+                                    alt={`Correct option ${opt} image`}
+                                    className="mt-2 max-w-xs h-auto rounded border border-gray-200"
+                                    onError={(e) => (e.target.src = '/placeholder-image.jpg')}
+                                  />
+                                )
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-4">
+                            <div className="flex items-center">
+                              <Clock className="w-4 h-4 mr-1" />
+                              <span>Time: {answer.timeSpentSeconds || 0}s</span>
+                            </div>
+                            <div className="flex items-center">
+                              <FileText className="w-4 h-4 mr-1" />
+                              <span>Status: {answer.attemptStatus || 'N/A'}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <BookOpen className="w-4 h-4 mr-1" />
+                              <span>Section: {answer.section || 'N/A'}</span>
+                            </div>
+                          </div>
+
+                          {explanation?.explanation && (
+                            <div className="bg-blue-50 border-l-4 border-blue-400 rounded-lg p-4">
+                              <div className="flex items-start">
+                                <Lightbulb className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
+                                <div>
+                                  <p className="font-medium text-blue-800 mb-1">Explanation</p>
+                                  <p className="text-blue-700">{explanation.explanation}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

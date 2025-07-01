@@ -23,6 +23,7 @@ const StudentExamPortal = () => {
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
   const [questionTimeMap, setQuestionTimeMap] = useState({});
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [isNavigatorOpen, setIsNavigatorOpen] = useState(false); // For mobile navigator toggle
   const sections = ['Physics', 'Chemistry', 'Math'];
 
   const { user } = useAuth();
@@ -85,7 +86,6 @@ const StudentExamPortal = () => {
 
       setCurrentExam(exam);
 
-      // Fetch questions with randomization
       const questionsResponse = await axiosInstance.get(`/questions/exam/${id}?random=true`);
       setQuestions(questionsResponse.data.questions || []);
 
@@ -324,6 +324,7 @@ const StudentExamPortal = () => {
     await saveAnswer();
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
+      setIsNavigatorOpen(false); // Close navigator on mobile after navigation
     }
   };
 
@@ -331,12 +332,14 @@ const StudentExamPortal = () => {
     await saveAnswer();
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
+      setIsNavigatorOpen(false); // Close navigator on mobile after navigation
     }
   };
 
   const jumpToQuestion = async (index) => {
     await saveAnswer();
     setCurrentQuestionIndex(index);
+    setIsNavigatorOpen(false); // Close navigator on mobile after navigation
   };
 
   const formatTime = (seconds) => {
@@ -379,7 +382,6 @@ const StudentExamPortal = () => {
     }
   };
 
-  // Render LaTeX or plain text
   const renderMathOrText = (text) => {
     if (!text) return null;
     const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
@@ -479,47 +481,47 @@ const StudentExamPortal = () => {
     if (!currentExam) return null;
 
     return (
-      <div className="container mx-auto px-4 py-8 max-w-3xl">
+      <div className="container mx-auto px-4 py-6 sm:px-6 max-w-4xl">
         <button
           onClick={() => {
             setCurrentExam(null);
             setView('examsList');
           }}
-          className="flex items-center text-blue-600 hover:text-blue-800 mb-6"
+          className="flex items-center text-blue-600 hover:text-blue-800 mb-4 sm:mb-6"
         >
           <ArrowLeft size={16} className="mr-1" /> Back to Exams
         </button>
 
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold">{currentExam.title}</h1>
-            <p className="text-gray-600 mt-2">{currentExam.description}</p>
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+          <div className="mb-4 sm:mb-6">
+            <h1 className="text-xl sm:text-2xl font-bold">{currentExam.title}</h1>
+            <p className="text-gray-600 mt-2 text-sm sm:text-base">{currentExam.description}</p>
           </div>
 
-          <div className="border-t border-b py-4 my-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border-t border-b py-3 sm:py-4 my-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <p className="text-sm text-gray-500">Date</p>
-                <p className="font-medium">{new Date(currentExam.examDate).toLocaleDateString()}</p>
+                <p className="text-xs sm:text-sm text-gray-500">Date</p>
+                <p className="font-medium text-sm sm:text-base">{new Date(currentExam.examDate).toLocaleDateString()}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Start Time</p>
-                <p className="font-medium">{new Date(currentExam.startTime).toLocaleTimeString()}</p>
+                <p className="text-xs sm:text-sm text-gray-500">Start Time</p>
+                <p className="font-medium text-sm sm:text-base">{new Date(currentExam.startTime).toLocaleTimeString()}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Duration</p>
-                <p className="font-medium">{currentExam.duration} minutes</p>
+                <p className="text-xs sm:text-sm text-gray-500">Duration</p>
+                <p className="font-medium text-sm sm:text-base">{currentExam.duration} minutes</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Questions</p>
-                <p className="font-medium">{questions.length || 0}</p>
+                <p className="text-xs sm:text-sm text-gray-500">Total Questions</p>
+                <p className="font-medium text-sm sm:text-base">{questions.length || 0}</p>
               </div>
             </div>
           </div>
 
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold mb-2">Instructions:</h2>
-            <ul className="list-disc pl-6 space-y-2">
+          <div className="mb-4 sm:mb-6">
+            <h2 className="text-base sm:text-lg font-semibold mb-2">Instructions:</h2>
+            <ul className="list-disc pl-4 sm:pl-6 space-y-1 sm:space-y-2 text-sm sm:text-base">
               <li>Read all questions carefully before answering.</li>
               <li>Questions are organized by sections (e.g., Physics, Chemistry, Math).</li>
               <li>You can navigate between questions using the navigation panel, grouped by section.</li>
@@ -538,7 +540,7 @@ const StudentExamPortal = () => {
           <div className="flex justify-center">
             <button
               onClick={startExam}
-              className="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium"
+              className="px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium text-sm sm:text-base"
             >
               Start Exam Now
             </button>
@@ -549,16 +551,16 @@ const StudentExamPortal = () => {
   };
 
   const renderExamsList = () => (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-2xl font-bold mb-6">Your Exams</h1>
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 max-w-4xl">
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Your Exams</h1>
 
       {loading ? (
         <div className="flex justify-center items-center h-64">
-          <p className="text-gray-500">Loading exams...</p>
+          <p className="text-gray-500 text-sm sm:text-base">Loading exams...</p>
         </div>
       ) : upcomingExams.length === 0 ? (
-        <div className="bg-white p-6 rounded-lg shadow text-center">
-          <p className="text-gray-500">No exams available at this time.</p>
+        <div className="bg-white p-4 sm:p-6 rounded-lg shadow text-center">
+          <p className="text-gray-500 text-sm sm:text-base">No exams available at this time.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -569,41 +571,41 @@ const StudentExamPortal = () => {
             const hasAttempted = attemptStatus[exam._id] || false;
 
             return (
-              <div key={exam._id} className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex justify-between items-start">
-                  <h2 className="text-xl font-semibold">{exam.title}</h2>
-                  <span className={statusClass}>
+              <div key={exam._id} className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start">
+                  <h2 className="text-lg sm:text-xl font-semibold">{exam.title}</h2>
+                  <span className={`${statusClass} mt-2 sm:mt-0`}>
                     {status === 'upcoming' && 'Upcoming'}
                     {status === 'ongoing' && 'Ongoing'}
                     {status === 'ended' && 'Ended'}
                   </span>
                 </div>
 
-                <p className="text-gray-600 mt-2">{exam.description}</p>
+                <p className="text-gray-600 mt-2 text-sm sm:text-base">{exam.description}</p>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-3 sm:mt-4">
                   <div>
-                    <p className="text-sm text-gray-500">Date</p>
-                    <p className="font-medium">{new Date(exam.examDate).toLocaleDateString()}</p>
+                    <p className="text-xs sm:text-sm text-gray-500">Date</p>
+                    <p className="font-medium text-sm sm:text-base">{new Date(exam.examDate).toLocaleDateString()}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Time</p>
-                    <p className="font-medium">
+                    <p className="text-xs sm:text-sm text-gray-500">Time</p>
+                    <p className="font-medium text-sm sm:text-base">
                       {new Date(exam.startTime).toLocaleTimeString()} -{' '}
                       {new Date(exam.endTime).toLocaleTimeString()}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Duration</p>
-                    <p className="font-medium">{exam.duration} minutes</p>
+                    <p className="text-xs sm:text-sm text-gray-500">Duration</p>
+                    <p className="font-medium text-sm sm:text-base">{exam.duration} minutes</p>
                   </div>
                 </div>
 
-                <div className="mt-6 flex justify-end">
+                <div className="mt-4 sm:mt-6 flex justify-end">
                   <button
                     onClick={() => fetchExamDetails(exam._id)}
                     disabled={!isAvailable || hasAttempted}
-                    className={`px-4 py-2 rounded-md ${
+                    className={`px-4 py-2 rounded-md text-sm sm:text-base ${
                       isAvailable && !hasAttempted
                         ? 'bg-blue-600 text-white hover:bg-blue-700'
                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
@@ -669,12 +671,14 @@ const StudentExamPortal = () => {
 
     const fullscreenWarning =
       !isFullScreen && view === 'examInterface' && !examEnded ? (
-        <div className="bg-red-100 border border-red-400 text-red-700 p-4 rounded mb-4 flex items-center">
-          <AlertCircle size={20} className="mr-2" />
-          <p>Fullscreen mode is required. Please click the button below to enter fullscreen.</p>
+        <div className="bg-red-100 border border-red-400 text-red-700 p-3 sm:p-4 rounded mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center">
+          <div className="flex items-center mb-2 sm:mb-0">
+            <AlertCircle size={20} className="mr-2" />
+            <p className="text-sm sm:text-base">Fullscreen mode is required. Please click the button below to enter fullscreen.</p>
+          </div>
           <button
             onClick={requestFullscreen}
-            className="ml-auto px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm sm:text-base sm:ml-auto"
           >
             Enter Fullscreen
           </button>
@@ -682,47 +686,55 @@ const StudentExamPortal = () => {
       ) : null;
 
     return (
-      <div className="container mx-auto px-4 py-4 max-w-6xl">
+      <div className="container mx-auto px-4 py-4 sm:px-6 max-w-6xl">
         {fullscreenWarning}
 
         {!examEnded ? (
           <>
-            <div className="bg-white p-4 rounded-lg shadow-md mb-4 flex justify-between items-center">
-              <div>
-                <h1 className="text-xl font-bold">{currentExam.title}</h1>
+            <div className="bg-white p-3 sm:p-4 rounded-lg shadow-md mb-3 sm:mb-4 flex flex-col sm:flex-row sm:justify-between sm:items-center">
+              <div className="mb-2 sm:mb-0">
+                <h1 className="text-lg sm:text-xl font-bold">{currentExam.title}</h1>
               </div>
-              <div className="flex items-center space-x-6">
-                <div>
-                  <p className="text-sm text-gray-500">Questions</p>
-                  <p className="font-medium">{attemptSummary.attempted}/{attemptSummary.total}</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-6">
+                <div className="mb-2 sm:mb-0">
+                  <p className="text-xs sm:text-sm text-gray-500">Questions</p>
+                  <p className="font-medium text-sm sm:text-base">{attemptSummary.attempted}/{attemptSummary.total}</p>
                 </div>
-                <div className="flex items-center">
-                  <Clock size={18} className="mr-2 text-red-600" />
-                  <span className="font-bold text-xl">{formatTime(timeLeft)}</span>
+                <div className="flex items-center mb-2 sm:mb-0">
+                  <Clock size={16} className="mr-2 text-red-600" />
+                  <span className="font-bold text-lg sm:text-xl">{formatTime(timeLeft)}</span>
                 </div>
                 <button
                   onClick={submitExam}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm sm:text-base"
                 >
                   Submit Exam
                 </button>
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="w-full md:w-64 bg-white p-4 rounded-lg shadow-md h-fit">
-                <h2 className="font-medium mb-3 text-gray-700">Question Navigator</h2>
+            <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
+              <div className={`w-full lg:w-64 bg-white p-3 sm:p-4 rounded-lg shadow-md h-fit ${isNavigatorOpen ? 'block' : 'hidden lg:block'}`}>
+                <div className="flex justify-between items-center mb-3">
+                  <h2 className="font-medium text-gray-700 text-sm sm:text-base">Question Navigator</h2>
+                  <button
+                    onClick={() => setIsNavigatorOpen(false)}
+                    className="lg:hidden px-2 py-1 bg-gray-200 rounded text-sm"
+                  >
+                    Close
+                  </button>
+                </div>
                 {sections.map((section) => {
                   const sectionQuestions = questions.filter((q) => q.section === section);
                   if (sectionQuestions.length === 0) return null;
                   return (
-                    <div key={section} className="mb-4">
-                      <h3 className="text-sm font-semibold text-gray-600 mb-2">{section}</h3>
-                      <div className="grid grid-cols-4 md:grid-cols-3 gap-2">
+                    <div key={section} className="mb-3 sm:mb-4">
+                      <h3 className="text-xs sm:text-sm font-semibold text-gray-600 mb-2">{section}</h3>
+                      <div className="grid grid-cols-5 sm:grid-cols-4 lg:grid-cols-3 gap-1 sm:gap-2">
                         {sectionQuestions.map((q, index) => {
                           const globalIndex = questions.findIndex((question) => question._id === q._id);
                           const qAnswers = answers[q._id] || { attemptStatus: 'not_attempted' };
-                          let buttonClass = 'w-10 h-10 rounded-full flex items-center justify-center';
+                          let buttonClass = 'w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm';
 
                           switch (qAnswers.attemptStatus) {
                             case 'attempted':
@@ -754,74 +766,82 @@ const StudentExamPortal = () => {
                   );
                 })}
 
-                <div className="mt-4 space-y-2">
+                <div className="mt-3 sm:mt-4 space-y-2">
                   <div className="flex items-center">
-                    <div className="w-4 h-4 rounded-full bg-green-100 border border-green-300 mr-2"></div>
-                    <span className="text-sm">Answered</span>
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-green-100 border border-green-300 mr-2"></div>
+                    <span className="text-xs sm:text-sm">Answered</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-4 h-4 rounded-full bg-yellow-100 border border-yellow-300 mr-2"></div>
-                    <span className="text-sm">Marked for Review</span>
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-yellow-100 border border-yellow-300 mr-2"></div>
+                    <span className="text-xs sm:text-sm">Marked for Review</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-4 h-4 rounded-full bg-gray-100 border border-gray-300 mr-2"></div>
-                    <span className="text-sm">Not Attempted</span>
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gray-100 border border-gray-300 mr-2"></div>
+                    <span className="text-xs sm:text-sm">Not Attempted</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex-1 bg-white p-6 rounded-lg shadow-md">
-                <div className="mb-6">
-                  <div className="flex justify-between items-start">
-                    <h2 className="text-lg font-semibold">Question {currentQuestionIndex + 1} ({currentQuestion.section})</h2>
-                    <div className="text-sm space-y-1">
-                      <div>
-                        {currentQuestion.marks > 0 && (
-                          <span className="text-green-600 font-medium">+{currentQuestion.marks} marks</span>
-                        )}
-                        {currentQuestion.negativeMarks > 0 && (
-                          <span className="text-red-600 font-medium ml-2">
-                            -{currentQuestion.negativeMarks} for wrong answer
-                          </span>
-                        )}
-                      </div>
-                      {currentQuestion.difficulty && (
-                        <div>
-                          <span className="text-sm font-medium text-gray-700">Difficulty: </span>
-                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getDifficultyBadgeStyles(currentQuestion.difficulty)}`}>
-                            {currentQuestion.difficulty.charAt(0).toUpperCase() + currentQuestion.difficulty.slice(1)}
-                          </span>
-                        </div>
+              <div className="flex-1 bg-white p-4 sm:p-6 rounded-lg shadow-md">
+                <div className="flex justify-between items-start mb-4 sm:mb-6">
+                  <div className="flex items-center">
+                    <h2 className="text-base sm:text-lg font-semibold">Question {currentQuestionIndex + 1} ({currentQuestion.section})</h2>
+                    <button
+                      onClick={() => setIsNavigatorOpen(true)}
+                      className="lg:hidden ml-3 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm"
+                    >
+                      Navigator
+                    </button>
+                  </div>
+                  <div className="text-xs sm:text-sm space-y-1">
+                    <div>
+                      {currentQuestion.marks > 0 && (
+                        <span className="text-green-600 font-medium">+{currentQuestion.marks} marks</span>
                       )}
-                      {currentQuestion.tags && currentQuestion.tags.length > 0 && (
-                        <div>
-                          <span className="text-sm font-medium text-gray-700">Tags: </span>
-                          {currentQuestion.tags.map((tag, tagIdx) => (
-                            <span
-                              key={tagIdx}
-                              className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded mr-1"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
+                      {currentQuestion.negativeMarks > 0 && (
+                        <span className="text-red-600 font-medium ml-2">
+                          -{currentQuestion.negativeMarks} for wrong answer
+                        </span>
                       )}
                     </div>
+                    {currentQuestion.difficulty && (
+                      <div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">Difficulty: </span>
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getDifficultyBadgeStyles(currentQuestion.difficulty)}`}>
+                          {currentQuestion.difficulty.charAt(0).toUpperCase() + currentQuestion.difficulty.slice(1)}
+                        </span>
+                      </div>
+                    )}
+                    {currentQuestion.tags && currentQuestion.tags.length > 0 && (
+                      <div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">Tags: </span>
+                        {currentQuestion.tags.map((tag, tagIdx) => (
+                          <span
+                            key={tagIdx}
+                            className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded mr-1"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-2">{renderMathOrText(currentQuestion.questionText)}</div>
+                </div>
+                <div className="mb-4 sm:mb-6">
+                  <div className="text-sm sm:text-base">{renderMathOrText(currentQuestion.questionText)}</div>
 
                   {currentQuestion.imageUrl && (
-                    <div className="mt-4">
+                    <div className="mt-3 sm:mt-4">
                       <img
                         src={currentQuestion.imageUrl}
                         alt="Question Image"
-                        className="max-h-56 object-contain"
+                        className="w-full max-h-48 sm:max-h-56 object-contain"
                       />
                     </div>
                   )}
                 </div>
 
-                <div className="space-y-3 mb-8">
+                <div className="space-y-2 sm:space-y-3 mb-6 sm:mb-8">
                   {currentQuestion.options.map((option, index) => (
                     <div
                       key={index}
@@ -834,7 +854,7 @@ const StudentExamPortal = () => {
                     >
                       <div className="flex items-center">
                         <div
-                          className={`w-5 h-5 mr-3 rounded-full border flex items-center justify-center ${
+                          className={`w-5 h-5 mr-2 sm:mr-3 rounded-full border flex items-center justify-center ${
                             questionAnswers.selectedOptions.includes(index)
                               ? 'border-blue-500 bg-blue-500'
                               : 'border-gray-400'
@@ -844,13 +864,13 @@ const StudentExamPortal = () => {
                             <CheckCircle size={12} className="text-white" />
                           )}
                         </div>
-                        <div className="flex flex-col">
+                        <div className="flex flex-col text-sm sm:text-base">
                           <div>{renderMathOrText(option.optionText)}</div>
                           {option.imageUrl && (
                             <img
                               src={option.imageUrl}
                               alt={`Option ${index + 1}`}
-                              className="max-h-20 object-contain mt-1"
+                              className="w-full max-h-16 sm:max-h-20 object-contain mt-1"
                             />
                           )}
                         </div>
@@ -859,12 +879,12 @@ const StudentExamPortal = () => {
                   ))}
                 </div>
 
-                <div className="flex justify-between mt-8">
-                  <div className="flex space-x-2">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-2 sm:gap-0 mt-6 sm:mt-8">
+                  <div className="flex flex-col sm:flex-row sm:space-x-2 gap-2 sm:gap-0">
                     <button
                       onClick={prevQuestion}
                       disabled={currentQuestionIndex === 0}
-                      className={`flex items-center px-4 py-2 rounded ${
+                      className={`flex items-center px-3 sm:px-4 py-2 rounded text-sm sm:text-base ${
                         currentQuestionIndex === 0
                           ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                           : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
@@ -875,14 +895,14 @@ const StudentExamPortal = () => {
 
                     <button
                       onClick={markForReview}
-                      className="flex items-center px-4 py-2 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200"
+                      className="flex items-center px-3 sm:px-4 py-2 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 text-sm sm:text-base"
                     >
                       <Flag size={16} className="mr-1" /> Mark for Review
                     </button>
 
                     <button
                       onClick={saveAnswer}
-                      className="flex items-center px-4 py-2 bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+                      className="flex items-center px-3 sm:px-4 py-2 bg-blue-100 text-blue-800 rounded hover:bg-blue-200 text-sm sm:text-base"
                     >
                       <Save size={16} className="mr-1" /> Save
                     </button>
@@ -891,7 +911,7 @@ const StudentExamPortal = () => {
                   <button
                     onClick={nextQuestion}
                     disabled={currentQuestionIndex === questions.length - 1}
-                    className={`flex items-center px-4 py-2 rounded ${
+                    className={`flex items-center px-3 sm:px-4 py-2 rounded text-sm sm:text-base ${
                       currentQuestionIndex === questions.length - 1
                         ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                         : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -904,20 +924,20 @@ const StudentExamPortal = () => {
             </div>
           </>
         ) : (
-          <div className="bg-white p-8 rounded-lg shadow-md text-center">
-            <CheckCircle size={64} className="mx-auto text-green-600 mb-4" />
-            <h1 className="text-2xl font-bold mb-2">Exam Submitted Successfully!</h1>
-            <p className="text-lg mb-6">Thank you for completing the exam.</p>
+          <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md text-center">
+            <CheckCircle size={48} sm={64} className="mx-auto text-green-600 mb-4" />
+            <h1 className="text-xl sm:text-2xl font-bold mb-2">Exam Submitted Successfully!</h1>
+            <p className="text-base sm:text-lg mb-4 sm:mb-6">Thank you for completing the exam.</p>
 
             {examResult && (
-              <div className="mb-6">
-                <p className="text-xl font-semibold">Your Score: {examResult.score}</p>
+              <div className="mb-4 sm:mb-6">
+                <p className="text-lg sm:text-xl font-semibold">Your Score: {examResult.score}</p>
               </div>
             )}
 
             <button
               onClick={() => navigate('/employee-dashboard/MyExams')}
-              className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-4 sm:px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm sm:text-base"
             >
               Return to Exams
             </button>
