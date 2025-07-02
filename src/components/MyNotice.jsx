@@ -33,9 +33,9 @@ const MyNotice = () => {
 
   useEffect(() => {
     // Debug Socket.IO connection
-    console.log('Socket URL:', SOCKET_URL);
-    console.log('Token:', localStorage.getItem('ims_token'));
-    console.log('User:', user);
+    // console.log('Socket URL:', SOCKET_URL);
+    // console.log('Token:', localStorage.getItem('ims_token'));
+    // console.log('User:', user);
     socket.on('connect', () => console.log('Socket.IO connected:', socket.id));
     socket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
 
