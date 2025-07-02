@@ -1,4 +1,5 @@
 import React from 'react'
+import axiosInstance from '../utils/api';
 
 const ResultList = () => {
   return (
