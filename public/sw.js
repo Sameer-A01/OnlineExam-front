@@ -19,8 +19,8 @@ self.addEventListener('push', function(event) {
   const title = data.title || 'New Notification';
   const options = {
     body: data.body || '',
-    icon: '/notification-icon.png',
-    badge: '/notification-badge.png',
+    icon: '/Logo.jpg',
+    badge: '/Logo.jpg',
     tag: Date.now().toString(),
   };
 
