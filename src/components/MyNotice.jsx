@@ -74,7 +74,7 @@ const registerServiceWorkerAndSubscribe = async () => {
           applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
         });
 
-        await axiosInstance.post('/api/push/subscribe', subscription);
+        await axiosInstance.post('/push/subscribe', subscription);
         console.log('Push subscribed & sent to server');
       } catch (err) {
         console.error('Push subscription failed:', err);
