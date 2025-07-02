@@ -6,6 +6,7 @@ import NotificationsSidebar from '../components/NotificationsSidebar';
 import UserHeader from './UserHeader';
 import Sidebar from './AllSidebar';
 import UserDoubtModal from './UserDoubtModel';
+import { useAuth } from '../context/AuthContext';
 import {
   MessageCircle,
   Heart,
@@ -37,16 +38,16 @@ import {
 // Attachment Popup Component
 const AttachmentPopup = ({ file, onClose }) => {
   const filename = file.url.split('/').pop();
- const correctUrl = `${import.meta.env.VITE_BASE_URL}/${filename}`;
+  const correctUrl = `${import.meta.env.VITE_API_URL}/${filename}`;
   const isImage = /\.(jpg|jpeg|png|gif)$/i.test(filename);
   const isPDF = /\.pdf$/i.test(filename);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl">
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 truncate">{filename}</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-2 sm:p-4 z-50">
+      <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative shadow-2xl">
+        <div className="p-3 sm:p-4">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">{filename}</h3>
             <div className="flex items-center space-x-2">
               <a
                 href={correctUrl}
@@ -54,13 +55,13 @@ const AttachmentPopup = ({ file, onClose }) => {
                 className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
                 title="Download"
               >
-                <Download className="w-5 h-5" />
+                <Download className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
               <button
                 onClick={onClose}
                 className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
           </div>
@@ -76,18 +77,18 @@ const AttachmentPopup = ({ file, onClose }) => {
               <iframe
                 src={`${correctUrl}#toolbar=0&navpanes=0&scrollbar=0`}
                 title={filename}
-                className="w-full h-[70vh] border-none rounded-lg"
+                className="w-full h-[60vh] sm:h-[70vh] border-none rounded-lg"
               />
             )}
             {!isImage && !isPDF && (
-              <div className="text-center text-gray-500 py-8">
-                <p>Preview not available for this file type.</p>
+              <div className="text-center text-gray-500 py-6 sm:py-8">
+                <p className="text-sm sm:text-base">Preview not available for this file type.</p>
                 <a
                   href={correctUrl}
                   download
-                  className="inline-flex items-center px-4 py-2 mt-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center px-3 sm:px-4 py-1.5 sm:py-2 mt-3 sm:mt-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                 >
-                  <Download className="w-4 h-4 mr-2" />
+                  <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
                   Download File
                 </a>
               </div>
@@ -133,6 +134,8 @@ const UserDiscussion = () => {
   });
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState(Notification?.permission || 'default');
+  const { user } = useAuth();
 
   // Debounce function
   const debounce = (func, delay) => {
@@ -145,51 +148,118 @@ const UserDiscussion = () => {
 
   // Admin Badge Component
   const AdminBadge = () => (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 ml-2">
-      <Shield className="w-3 h-3 mr-1" />
+    <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 ml-1 sm:ml-2">
+      <Shield className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5 sm:mr-1" />
       Admin
     </span>
   );
 
   // Helper to render author with admin badge
   const renderAuthor = (author) => (
-    <div className="flex items-center">
+    <div className="flex items-center text-xs sm:text-sm">
       <span>{author?.name || 'Anonymous'}</span>
       {author?.role === 'admin' && <AdminBadge />}
     </div>
   );
 
+  // Generate notification message
+  const generateNotificationMessage = (notification) => {
+    switch (notification.type) {
+      case 'new_doubt':
+        return `${notification.sender?.name || 'Someone'} posted a new doubt: "${notification.doubt?.title || 'Untitled'}"`;
+      case 'new_comment':
+        return `${notification.sender?.name || 'Someone'} commented on your doubt: "${notification.doubt?.title || 'a doubt'}"`;
+      case 'like_doubt':
+        return `${notification.sender?.name || 'Someone'} liked your doubt: "${notification.doubt?.title || 'Untitled'}"`;
+      case 'like_comment':
+        return `${notification.sender?.name || 'Someone'} liked your comment`;
+      case 'tagged':
+        return `${notification.sender?.name || 'Someone'} tagged you in a comment`;
+      case 'like_hashtag':
+        return `${notification.sender?.name || 'Someone'} liked a hashtag (#${notification.hashtag}) you follow`;
+      default:
+        return 'You have a new notification';
+    }
+  };
+
   // Initialize socket connection
   useEffect(() => {
- const newSocket = io(import.meta.env.VITE_API_URL, {
+    const newSocket = io(import.meta.env.VITE_API_URL, {
+      auth: { token: localStorage.getItem('ims_token') },
       withCredentials: true,
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
     });
     setSocket(newSocket);
+    newSocket.on('connect', () => console.log('Socket.IO connected:', newSocket.id));
+    newSocket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
     return () => newSocket.disconnect();
   }, []);
 
-  // Set up socket listeners
+  // Request notification permission
+  useEffect(() => {
+    if ('Notification' in window && notificationPermission !== 'granted' && notificationPermission !== 'denied') {
+      Notification.requestPermission().then((permission) => {
+        setNotificationPermission(permission);
+      }).catch((error) => {
+        console.error('Error requesting notification permission:', error);
+      });
+    }
+  }, [notificationPermission]);
+
+  // Register service worker and subscribe to push notifications
+  const registerServiceWorkerAndSubscribe = async () => {
+    if ('serviceWorker' in navigator && 'PushManager' in window && user?.userId) {
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js');
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY),
+        });
+
+        await axiosInstance.post('/push/subscribe', {
+          userId: user.userId,
+          subscription,
+        });
+        console.log('Push subscription successful');
+      } catch (err) {
+        console.error('Push subscription failed:', err);
+      }
+    } else {
+      console.error('Service worker or userId not available for push subscription');
+    }
+  };
+
+  const urlBase64ToUint8Array = (base64String) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+  };
+
+  // Set up socket listeners and push notifications
   useEffect(() => {
     if (!socket) return;
+
     socket.on('notification', (notification) => {
       setNotifications((prev) => [notification, ...prev]);
       setUnreadCount((prev) => prev + 1);
-      if (document.visibilityState !== 'visible' && 'Notification' in window) {
+      if (document.visibilityState !== 'visible' && notificationPermission === 'granted') {
         new Notification('New Notification', {
           body: generateNotificationMessage(notification),
+          icon: '/notification-icon.png',
+          tag: notification._id || Date.now().toString(),
         });
       }
+      fetchDoubts(); // Refresh doubts to include new activity
     });
-    return () => socket.off('notification');
-  }, [socket]);
 
-  // Request notification permission
-  useEffect(() => {
-    if ('Notification' in window) {
-      Notification.requestPermission();
+    // Register service worker and subscribe if user is authenticated
+    if (user?.userId) {
+      registerServiceWorkerAndSubscribe();
     }
-  }, []);
+
+    return () => socket.off('notification');
+  }, [socket, user, notificationPermission]);
 
   // Fetch doubts
   const fetchDoubts = useCallback(async (search = filters.search, hashtag = filters.hashtag) => {
@@ -205,7 +275,7 @@ const UserDiscussion = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters]);
 
   // Debounced fetchDoubts
   const debouncedFetchDoubts = useCallback(debounce(fetchDoubts, 300), [fetchDoubts]);
@@ -263,6 +333,7 @@ const UserDiscussion = () => {
     }
   };
 
+  // Mark all notifications as read
   const markAllNotificationsRead = async () => {
     try {
       await axiosInstance.put('/discussions/notifications/mark-all-read');
@@ -327,7 +398,7 @@ const UserDiscussion = () => {
         formData.append('hashtags', currentHashtags.join(','));
       }
       newDoubt.attachments.forEach((file) => formData.append('attachments', file));
-      await axiosInstance.post('/discussions/doubts', formData, {
+      const response = await axiosInstance.post('/discussions/doubts', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -337,6 +408,12 @@ const UserDiscussion = () => {
       setShowCreateForm(false);
       fetchDoubts();
       fetchMyDoubts();
+      // Emit a socket event to trigger notification
+      socket.emit('newDoubt', {
+        doubt: response.data.doubt,
+        sender: { _id: user.userId, name: user.name },
+        type: 'new_doubt',
+      });
     } catch (error) {
       console.error('Failed to create doubt:', error);
       alert(error.response?.data?.message || 'Error creating doubt. Please try again.');
@@ -534,6 +611,36 @@ const UserDiscussion = () => {
     }
   };
 
+  // Pin/Unpin doubt (admin only)
+  const handlePinDoubt = async (doubtId) => {
+    try {
+      const response = await axiosInstance.put(`/discussions/doubts/${doubtId}/pin`);
+      fetchDoubts();
+      if (selectedDoubt?._id === doubtId) {
+        setSelectedDoubt((prev) => ({ ...prev, isPinned: !prev.isPinned }));
+      }
+      alert(response.data.message);
+    } catch (error) {
+      console.error('Error pinning/unpinning doubt:', error);
+      alert('Error updating pin status. Please try again.');
+    }
+  };
+
+  // Resolve/Unresolve doubt (admin only)
+  const handleResolveDoubt = async (doubtId) => {
+    try {
+      const response = await axiosInstance.put(`/discussions/doubts/${doubtId}/resolve`);
+      fetchDoubts();
+      if (selectedDoubt?._id === doubtId) {
+        setSelectedDoubt((prev) => ({ ...prev, isResolved: !prev.isResolved }));
+      }
+      alert(response.data.message);
+    } catch (error) {
+      console.error('Error resolving/unresolving doubt:', error);
+      alert('Error updating resolve status. Please try again.');
+    }
+  };
+
   // Mark notification as read
   const markNotificationRead = async (notificationId) => {
     try {
@@ -578,7 +685,7 @@ const UserDiscussion = () => {
     setSelectedAttachment(file);
   };
 
-  // Close all mobile menus when clicking outside
+  // Close mobile menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (isMobileMenuOpen && !event.target.closest('.mobile-menu-container')) {
@@ -608,29 +715,29 @@ const UserDiscussion = () => {
         setIsMobileMenuOpen={setIsMobileMenuOpen}
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-col lg:flex-row gap-6">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-6">
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
           {/* Mobile Menu Button */}
           <div className="lg:hidden flex justify-between items-center mb-4">
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2 rounded-lg bg-white shadow-md"
             >
-              <Menu className="w-6 h-6 text-gray-700" />
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700" />
             </button>
             <button
               onClick={() => setShowCreateForm(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
               <span className="hidden sm:inline">Ask Doubt</span>
             </button>
           </div>
 
           {/* Mobile Menu */}
           {isMobileMenuOpen && (
-            <div className="lg:hidden mobile-menu-container bg-white rounded-xl shadow-xl p-4 mb-6">
-              <div className="flex flex-col space-y-4">
+            <div className="lg:hidden mobile-menu-container bg-white rounded-xl shadow-xl p-3 sm:p-4 mb-4 sm:mb-6">
+              <div className="flex flex-col space-y-3 sm:space-y-4">
                 <button
                   onClick={() => {
                     setShowMyDoubts(!showMyDoubts);
@@ -638,19 +745,19 @@ const UserDiscussion = () => {
                     setShowMostLiked(false);
                     setShowBookmarks(false);
                   }}
-                  className={`px-4 py-2 rounded-lg text-left flex items-center justify-between ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-left flex items-center justify-between text-sm sm:text-base ${
                     showMyDoubts ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
                   }`}
                 >
                   <span>My Doubts</span>
                   <ChevronRight
-                    className={`w-5 h-5 transition-transform ${
+                    className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
                       showMyDoubts ? 'transform rotate-90' : ''
                     }`}
                   />
                 </button>
                 {showMyDoubts && (
-                  <div className="pl-4 space-y-2">
+                  <div className="pl-3 sm:pl-4 space-y-2">
                     {myDoubts.length > 0 ? (
                       myDoubts.map((doubt) => (
                         <div
@@ -661,11 +768,11 @@ const UserDiscussion = () => {
                             setIsMobileMenuOpen(false);
                           }}
                         >
-                          <p className="truncate">{doubt.title}</p>
+                          <p className="truncate text-sm sm:text-base">{doubt.title}</p>
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500 text-sm p-2">No doubts yet</p>
+                      <p className="text-gray-500 text-xs sm:text-sm p-2">No doubts yet</p>
                     )}
                   </div>
                 )}
@@ -677,19 +784,19 @@ const UserDiscussion = () => {
                     setShowMostLiked(false);
                     setShowBookmarks(false);
                   }}
-                  className={`px-4 py-2 rounded-lg text-left flex items-center justify-between ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-left flex items-center justify-between text-sm sm:text-base ${
                     showPopularHashtags ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
                   }`}
                 >
                   <span>Popular Hashtags</span>
                   <ChevronRight
-                    className={`w-5 h-5 transition-transform ${
+                    className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
                       showPopularHashtags ? 'transform rotate-90' : ''
                     }`}
                   />
                 </button>
                 {showPopularHashtags && (
-                  <div className="pl-4 space-y-2">
+                  <div className="pl-3 sm:pl-4 space-y-2">
                     {popularHashtags.length > 0 ? (
                       popularHashtags.map((tag, index) => (
                         <div
@@ -701,7 +808,7 @@ const UserDiscussion = () => {
                               handleHashtagClick(tag.name);
                               setIsMobileMenuOpen(false);
                             }}
-                            className="text-blue-600 hover:underline"
+                            className="text-blue-600 hover:underline text-sm sm:text-base"
                           >
                             #{tag.name}
                           </button>
@@ -710,16 +817,16 @@ const UserDiscussion = () => {
                             className="flex items-center space-x-1 text-gray-500 hover:text-red-500"
                           >
                             <Heart
-                              className={`w-4 h-4 ${
+                              className={`w-3 h-3 sm:w-4 sm:h-4 ${
                                 tag.isLiked ? 'fill-current text-red-500' : ''
                               }`}
                             />
-                            <span>{tag.likes}</span>
+                            <span className="text-xs sm:text-sm">{tag.likes}</span>
                           </button>
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500 text-sm p-2">No hashtags yet</p>
+                      <p className="text-gray-500 text-xs sm:text-sm p-2">No hashtags yet</p>
                     )}
                   </div>
                 )}
@@ -731,19 +838,19 @@ const UserDiscussion = () => {
                     setShowPopularHashtags(false);
                     setShowBookmarks(false);
                   }}
-                  className={`px-4 py-2 rounded-lg text-left flex items-center justify-between ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-left flex items-center justify-between text-sm sm:text-base ${
                     showMostLiked ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
                   }`}
                 >
                   <span>Most Liked</span>
                   <ChevronRight
-                    className={`w-5 h-5 transition-transform ${
+                    className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
                       showMostLiked ? 'transform rotate-90' : ''
                     }`}
                   />
                 </button>
                 {showMostLiked && (
-                  <div className="pl-4 space-y-2">
+                  <div className="pl-3 sm:pl-4 space-y-2">
                     {mostLikedQuestions.length > 0 ? (
                       mostLikedQuestions.map((doubt) => (
                         <div
@@ -754,15 +861,15 @@ const UserDiscussion = () => {
                             setIsMobileMenuOpen(false);
                           }}
                         >
-                          <p className="truncate">{doubt.title}</p>
-                          <div className="flex items-center text-sm text-gray-500">
+                          <p className="truncate text-sm sm:text-base">{doubt.title}</p>
+                          <div className="flex items-center text-xs sm:text-sm text-gray-500">
                             <Heart className="w-3 h-3 mr-1" />
                             <span>{doubt.likes?.length || 0}</span>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500 text-sm p-2">No liked questions yet</p>
+                      <p className="text-gray-500 text-xs sm:text-sm p-2">No liked questions yet</p>
                     )}
                   </div>
                 )}
@@ -774,19 +881,19 @@ const UserDiscussion = () => {
                     setShowPopularHashtags(false);
                     setShowMostLiked(false);
                   }}
-                  className={`px-4 py-2 rounded-lg text-left flex items-center justify-between ${
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-left flex items-center justify-between text-sm sm:text-base ${
                     showBookmarks ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
                   }`}
                 >
                   <span>Bookmarks</span>
                   <ChevronRight
-                    className={`w-5 h-5 transition-transform ${
+                    className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
                       showBookmarks ? 'transform rotate-90' : ''
                     }`}
                   />
                 </button>
                 {showBookmarks && (
-                  <div className="pl-4 space-y-2">
+                  <div className="pl-3 sm:pl-4 space-y-2">
                     {bookmarkedDoubts.length > 0 ? (
                       bookmarkedDoubts.map((doubt) => (
                         <div
@@ -797,11 +904,11 @@ const UserDiscussion = () => {
                             setIsMobileMenuOpen(false);
                           }}
                         >
-                          <p className="truncate">{doubt.title}</p>
+                          <p className="truncate text-sm sm:text-base">{doubt.title}</p>
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500 text-sm p-2">No bookmarks yet</p>
+                      <p className="text-gray-500 text-xs sm:text-sm p-2">No bookmarks yet</p>
                     )}
                   </div>
                 )}
@@ -809,7 +916,7 @@ const UserDiscussion = () => {
             </div>
           )}
 
-          {/* Enhanced Professional Sidebar - Desktop */}
+          {/* Sidebar - Desktop */}
           <Sidebar
             isSidebarOpen={isSidebarOpen}
             setIsSidebarOpen={setIsSidebarOpen}
@@ -828,15 +935,18 @@ const UserDiscussion = () => {
             handleViewDoubt={handleViewDoubt}
             handleHashtagClick={handleHashtagClick}
             handleLikeHashtag={handleLikeHashtag}
+            className={`fixed inset-y-0 left-0 z-40 w-64 sm:w-80 bg-white shadow-2xl transform ${
+              isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            } lg:static lg:translate-x-0 transition-transform duration-300 ease-in-out overflow-y-auto`}
           />
 
           {/* Main Content */}
-          <div className="flex-1 space-y-6">
-            {/* Enhanced Filters Section */}
+          <div className="flex-1 space-y-4 sm:space-y-6">
+            {/* Filters Section */}
             <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6 transition-all duration-300 hover:shadow-2xl">
-              <div className="flex flex-col sm:flex-row gap-4">
-                {/* Enhanced Search Bar */}
-                <div className="relative flex-1 group">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4">
+                {/* Search Bar */}
+                <div className="relative flex-1 group min-w-0">
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   <div className="relative">
                     <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-blue-500 w-4 h-4 sm:w-5 sm:h-5 transition-colors duration-200" />
@@ -850,8 +960,8 @@ const UserDiscussion = () => {
                   </div>
                 </div>
 
-                {/* Enhanced Hashtag Filter */}
-                <div className="relative group">
+                {/* Hashtag Filter */}
+                <div className="relative group w-full sm:w-auto">
                   <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   <div className="relative">
                     <Hash className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-purple-500 w-4 h-4 sm:w-5 sm:h-5 transition-colors duration-200" />
@@ -860,12 +970,12 @@ const UserDiscussion = () => {
                       placeholder="Filter by hashtag..."
                       value={filters.hashtag}
                       onChange={(e) => setFilters({ ...filters, hashtag: e.target.value })}
-                      className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-2 sm:py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-200 bg-white/50 backdrop-blur-sm hover:bg-white/80 placeholder-gray-500 text-sm sm:text-base min-w-[140px]"
+                      className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-2 sm:py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-200 bg-white/50 backdrop-blur-sm hover:bg-white/80 placeholder-gray-500 text-sm sm:text-base min-w-[120px] sm:min-w-[140px]"
                     />
                   </div>
                 </div>
 
-                {/* Enhanced Clear Filters Button */}
+                {/* Clear Filters Button */}
                 <button
                   onClick={() => {
                     setFilters({ search: '', hashtag: '' });
@@ -874,17 +984,17 @@ const UserDiscussion = () => {
                     setShowMostLiked(false);
                     setShowBookmarks(false);
                   }}
-                  className="group relative px-4 sm:px-6 py-2 sm:py-3 text-gray-600 hover:text-white transition-all duration-300 rounded-xl overflow-hidden"
+                  className="group relative px-4 sm:px-6 py-2 sm:py-3 text-gray-600 hover:text-white transition-all duration-300 rounded-xl overflow-hidden text-sm sm:text-base"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                   <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-600 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                  <span className="relative flex items-center gap-1 sm:gap-2 text-sm sm:text-base">
+                  <span className="relative flex items-center gap-1 sm:gap-2">
                     <X className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="hidden sm:inline">Clear Filters</span>
+                    Clear Filters
                   </span>
                 </button>
 
-                {/* Enhanced Mobile Sidebar Toggle */}
+                {/* Mobile Sidebar Toggle */}
                 <button
                   onClick={() => {
                     setIsSidebarOpen(!isSidebarOpen);
@@ -895,25 +1005,25 @@ const UserDiscussion = () => {
                       setShowBookmarks(false);
                     }
                   }}
-                  className="lg:hidden group relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden"
+                  className="lg:hidden group relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
                 >
                   <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                  <span className="relative flex items-center gap-1 sm:gap-2 text-sm sm:text-base">
+                  <span className="relative flex items-center gap-1 sm:gap-2">
                     <Filter className="w-3 h-3 sm:w-4 sm:h-4" />
-                    {isSidebarOpen ? 'Hide' : 'Show'}
+                    {isSidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'}
                   </span>
                 </button>
               </div>
             </div>
 
-            {/* Enhanced Doubts List */}
+            {/* Doubts List */}
             <div className="space-y-4 sm:space-y-6">
               {doubts.length === 0 ? (
-                <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6 text-center transform transition-all duration-500 hover:scale-105">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full flex items-center justify-center">
+                <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6 sm:p-8 text-center transform transition-all duration-500 hover:scale-105">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full flex items-center justify-center">
                     <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
                   </div>
-                  <p className="text-gray-600 text-base sm:text-lg mb-4">
+                  <p className="text-gray-600 text-sm sm:text-lg mb-3 sm:mb-4">
                     {filters.search || filters.hashtag
                       ? `No doubts found matching "${filters.search || filters.hashtag}"`
                       : 'No doubts found. Be the first to post one!'}
@@ -921,7 +1031,7 @@ const UserDiscussion = () => {
                   {(filters.search || filters.hashtag) && (
                     <button
                       onClick={() => setFilters({ search: '', hashtag: '' })}
-                      className="group relative px-6 py-2 sm:px-8 sm:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
+                      className="group relative px-6 sm:px-8 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
                     >
                       <div className="absolute inset-0 bg-white/20 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
                       <span className="relative">Show All Doubts</span>
@@ -932,32 +1042,32 @@ const UserDiscussion = () => {
                 doubts.map((doubt, index) => (
                   <div
                     key={doubt._id}
-                    className="group bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-500 hover:scale-[1.02] hover:border-blue-300/50 overflow-hidden"
+                    className="group bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-500 hover:scale-[1.01] sm:hover:scale-[1.02] hover:border-blue-300/50 overflow-hidden"
                     style={{
                       animationDelay: `${index * 100}ms`,
                       animation: 'slideInUp 0.6s ease-out forwards',
                     }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    <div className="relative p-4 sm:p-6 md:p-8">
+                    <div className="relative p-4 sm:p-6 lg:p-8">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
+                          <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3 sm:mb-4">
                             {doubt.isPinned && (
-                              <div className="flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-blue-700 rounded-full text-xs font-medium animate-pulse">
-                                <Pin className="w-3 h-3" />
+                              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-blue-700 rounded-full text-xs font-medium animate-pulse">
+                                <Pin className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                 Pinned
                               </div>
                             )}
                             {doubt.isResolved && (
-                              <div className="flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-700 rounded-full text-xs font-medium">
-                                <CheckCircle className="w-3 h-3" />
+                              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-700 rounded-full text-xs font-medium">
+                                <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                 Resolved
                               </div>
                             )}
                           </div>
                           <h3
-                            className="text-lg sm:text-xl font-bold text-gray-900 cursor-pointer hover:text-transparent hover:bg-clip-text hover:bg-gradient-to-r hover:from-blue-600 hover:to-purple-600 transition-all duration-300 mb-2 sm:mb-3 line-clamp-2"
+                            className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 cursor-pointer hover:text-transparent hover:bg-clip-text hover:bg-gradient-to-r hover:from-blue-600 hover:to-purple-600 transition-all duration-300 mb-2 sm:mb-3 line-clamp-2"
                             onClick={() => handleViewDoubt(doubt)}
                           >
                             {doubt.title}
@@ -966,15 +1076,15 @@ const UserDiscussion = () => {
                             {doubt.content}
                           </p>
                           {doubt.hashtags && doubt.hashtags.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
+                            <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3 sm:mb-4">
                               {doubt.hashtags.map((tag, tagIndex) => (
                                 <button
                                   key={tagIndex}
                                   onClick={() => handleHashtagClick(tag)}
-                                  className="group/tag relative inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-blue-500 hover:to-purple-600 hover:text-white transition-all duration-300 hover:shadow-lg hover:scale-105 overflow-hidden"
+                                  className="group/tag relative inline-flex items-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-blue-500 hover:to-purple-600 hover:text-white transition-all duration-300 hover:shadow-lg hover:scale-105 overflow-hidden"
                                 >
                                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 translate-x-full group-hover/tag:translate-x-0 transition-transform duration-300"></div>
-                                  <Hash className="w-3 h-3 mr-1 relative" />
+                                  <Hash className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 relative" />
                                   <span className="relative">{tag}</span>
                                 </button>
                               ))}
@@ -982,7 +1092,7 @@ const UserDiscussion = () => {
                           )}
                           {doubt.attachments?.length > 0 && (
                             <div className="mb-4 sm:mb-6">
-                              <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2 sm:mb-3 flex items-center gap-1 sm:gap-2">
+                              <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2">
                                 <Paperclip className="w-3 h-3 sm:w-4 sm:h-4" />
                                 Attachments ({doubt.attachments.length})
                               </h4>
@@ -1009,18 +1119,18 @@ const UserDiscussion = () => {
                               </div>
                             </div>
                           )}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs sm:text-sm">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs sm:text-sm gap-3 sm:gap-0">
                             <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-gray-500 mb-2 sm:mb-0">
-                              <div className="flex items-center gap-1 sm:gap-2">
+                              <div className="flex items-center gap-1.5 sm:gap-2">
                                 {renderAuthor(doubt.author)}
                               </div>
                               {doubt.batch && (
-                                <span className="inline-flex items-center px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-xs font-medium bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 hover:from-blue-100 hover:to-purple-100 transition-all duration-300">
+                                <span className="inline-flex items-center px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs font-medium bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 hover:from-blue-100 hover:to-purple-100 transition-all duration-300">
                                   {doubt.batch.name}
                                 </span>
                               )}
                               <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
+                                <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                 {new Date(doubt.createdAt).toLocaleDateString()}
                               </span>
                             </div>
@@ -1030,7 +1140,7 @@ const UserDiscussion = () => {
                                   e.stopPropagation();
                                   handleLikeDoubt(doubt._id);
                                 }}
-                                className={`group/like flex items-center space-x-1 px-2 py-1 sm:px-3 sm:py-2 rounded-lg transition-all duration-300 hover:scale-110 ${
+                                className={`group/like flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all duration-300 hover:scale-110 ${
                                   doubt.likes?.includes(doubt._id)
                                     ? 'text-red-600 bg-red-50'
                                     : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
@@ -1043,7 +1153,7 @@ const UserDiscussion = () => {
                                 />
                                 <span className="font-medium">{doubt.likes?.length || 0}</span>
                               </button>
-                              <div className="flex items-center space-x-1 px-2 py-1 sm:px-3 sm:py-2 text-gray-500 bg-gray-50 rounded-lg">
+                              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-500 bg-gray-50 rounded-lg">
                                 <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
                                 <span className="font-medium">{doubt.views || 0}</span>
                               </div>
@@ -1052,7 +1162,7 @@ const UserDiscussion = () => {
                                   e.stopPropagation();
                                   handleViewDoubt(doubt);
                                 }}
-                                className="group/comment flex items-center space-x-1 px-2 py-1 sm:px-3 sm:py-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-all duration-300 hover:scale-110"
+                                className="group/comment flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-all duration-300 hover:scale-110"
                               >
                                 <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-300 group-hover/comment:scale-125" />
                                 <span className="font-medium">{doubt.commentCount || 0}</span>
@@ -1062,7 +1172,7 @@ const UserDiscussion = () => {
                                   e.stopPropagation();
                                   handleBookmarkDoubt(doubt._id);
                                 }}
-                                className={`group/bookmark p-1 sm:p-2 rounded-lg transition-all duration-300 hover:scale-110 ${
+                                className={`group/bookmark p-1.5 sm:p-2 rounded-lg transition-all duration-300 hover:scale-110 ${
                                   bookmarkedDoubts.some((bd) => bd._id === doubt._id)
                                     ? 'text-blue-600 bg-blue-50'
                                     : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'
@@ -1076,14 +1186,14 @@ const UserDiscussion = () => {
                                   }`}
                                 />
                               </button>
-                              {(doubt.author?._id === localStorage.getItem('userId') ||
-                                localStorage.getItem('role') === 'admin') && (
+                              {(doubt.author?._id === user?.userId ||
+                                user?.role === 'admin') && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleDeleteDoubt(doubt._id);
                                   }}
-                                  className="group/delete p-1 sm:p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all duration-300 hover:scale-110"
+                                  className="group/delete p-1.5 sm:p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all duration-300 hover:scale-110"
                                 >
                                   <Trash2 className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-300 group-hover/delete:scale-125" />
                                 </button>
@@ -1091,8 +1201,8 @@ const UserDiscussion = () => {
                             </div>
                           </div>
                         </div>
-                        {localStorage.getItem('role') === 'admin' && (
-                          <div className="flex flex-row sm:flex-col space-x-3 sm:space-x-0 sm:space-y-3 mt-3 sm:mt-0 sm:ml-6">
+                        {user?.role === 'admin' && (
+                          <div className="flex flex-row sm:flex-col space-x-3 sm:space-x-0 sm:space-y-3 mt-3 sm:mt-0 sm:ml-4">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1132,32 +1242,6 @@ const UserDiscussion = () => {
             </div>
           </div>
 
-          {/* Add these CSS animations to global CSS file or styled-components */}
-          <style jsx>{`
-            @keyframes slideInUp {
-              from {
-                opacity: 0;
-                transform: translateY(30px);
-              }
-              to {
-                opacity: 1;
-                transform: translateY(0);
-              }
-            }
-            .line-clamp-2 {
-              display: -webkit-box;
-              -webkit-line-clamp: 2;
-              -webkit-box-orient: vertical;
-              overflow: hidden;
-            }
-            .line-clamp-3 {
-              display: -webkit-box;
-              -webkit-line-clamp: 3;
-              -webkit-box-orient: vertical;
-              overflow: hidden;
-            }
-          `}</style>
-
           {/* Notifications Sidebar */}
           {showNotifications && (
             <NotificationsSidebar
@@ -1176,10 +1260,10 @@ const UserDiscussion = () => {
 
       {/* Create Doubt Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-lg sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <h2 className="text-lg sm:text-xl font-semibold">Ask a Doubt</h2>
                 <button
                   onClick={() => setShowCreateForm(false)}
@@ -1188,45 +1272,49 @@ const UserDiscussion = () => {
                   <X className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                    Title *
+                  </label>
                   <input
                     type="text"
                     value={newDoubt.title}
                     onChange={(e) => setNewDoubt({ ...newDoubt, title: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                     placeholder="Enter your doubt title..."
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     Description *
                   </label>
                   <textarea
                     value={newDoubt.content}
                     onChange={(e) => setNewDoubt({ ...newDoubt, content: e.target.value })}
                     rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                     placeholder="Describe your doubt in detail..."
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
-                  <div className="flex flex-wrap gap-2 mb-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                    Hashtags
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
                     {currentHashtags.map((tag, index) => (
                       <div
                         key={index}
-                        className="flex items-center bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs"
+                        className="flex items-center bg-blue-100 text-blue-800 px-1.5 sm:px-2 py-0.5 rounded-full text-xs"
                       >
                         #{tag}
                         <button
                           onClick={() => removeHashtag(index)}
                           className="ml-1 text-blue-600 hover:text-blue-800"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                         </button>
                       </div>
                     ))}
@@ -1236,17 +1324,17 @@ const UserDiscussion = () => {
                     value={hashtagInput}
                     onChange={(e) => setHashtagInput(e.target.value)}
                     onKeyDown={handleHashtagKeyDown}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                     placeholder="Type a hashtag and press Enter"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     Attachments
                   </label>
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-3 sm:space-x-4">
                     <label className="cursor-pointer">
-                      <span className="px-3 py-1 sm:px-4 sm:py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base">
+                      <span className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center space-x-1.5 sm:space-x-2 text-sm sm:text-base">
                         <Paperclip className="w-3 h-3 sm:w-4 sm:h-4" />
                         <span>Choose Files</span>
                       </span>
@@ -1259,24 +1347,24 @@ const UserDiscussion = () => {
                       />
                     </label>
                     {newDoubt.attachments.length > 0 && (
-                      <span className="text-sm text-gray-500">
+                      <span className="text-xs sm:text-sm text-gray-500">
                         {newDoubt.attachments.length} file(s) selected
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="flex justify-end space-x-3 pt-4">
+                <div className="flex justify-end space-x-2 sm:space-x-3 pt-3 sm:pt-4">
                   <button
                     type="button"
                     onClick={() => setShowCreateForm(false)}
-                    className="px-3 py-1 sm:px-4 sm:py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm sm:text-base"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm sm:text-base"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleCreateDoubt}
-                    className="px-3 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                   >
                     Post Doubt
                   </button>
@@ -1315,28 +1403,36 @@ const UserDiscussion = () => {
           onClose={() => setSelectedAttachment(null)}
         />
       )}
+
+      {/* CSS Animations */}
+      <style jsx>{`
+        @keyframes slideInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .line-clamp-3 {
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+      `}</style>
     </div>
   );
 };
-
-// Helper function to generate notification messages
-function generateNotificationMessage(notification) {
-  switch (notification.type) {
-    case 'new_doubt':
-      return `${notification.sender?.name} posted a new doubt: "${notification.doubt?.title}"`;
-    case 'new_comment':
-      return `${notification.sender?.name} commented on your doubt: "${notification.doubt?.title}"`;
-    case 'like_doubt':
-      return `${notification.sender?.name} liked your doubt: "${notification.doubt?.title}"`;
-    case 'like_comment':
-      return `${notification.sender?.name} liked your comment`;
-    case 'tagged':
-      return `${notification.sender?.name} tagged you in a comment`;
-    case 'like_hashtag':
-      return `${notification.sender?.name} liked a hashtag (#${notification.hashtag}) you follow`;
-    default:
-      return 'You have a new notification';
-  }
-}
 
 export default UserDiscussion;

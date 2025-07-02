@@ -32,11 +32,12 @@ import {
   Bookmark,
   Download,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 // Attachment Popup Component
 const AttachmentPopup = ({ file, onClose }) => {
   const filename = file.url.split('/').pop();
- const correctUrl = `${import.meta.env.VITE_API_URL}/${filename}`;
+  const correctUrl = `${import.meta.env.VITE_API_URL}/${filename}`;
   const isImage = /\.(jpg|jpeg|png|gif)$/i.test(filename);
   const isPDF = /\.pdf$/i.test(filename);
 
@@ -131,6 +132,8 @@ const AdminDiscussion = () => {
     hashtag: '',
   });
   const [selectedAttachment, setSelectedAttachment] = useState(null);
+  const [notificationPermission, setNotificationPermission] = useState(Notification?.permission || 'default');
+  const { user } = useAuth();
 
   // Debounce function
   const debounce = (func, delay) => {
@@ -157,39 +160,104 @@ const AdminDiscussion = () => {
     </div>
   );
 
+  // Generate notification message
+  const generateNotificationMessage = (notification) => {
+    switch (notification.type) {
+      case 'new_doubt':
+        return `${notification.sender?.name || 'Someone'} posted a new doubt: "${notification.doubt?.title || 'Untitled'}"`;
+      case 'new_comment':
+        return `${notification.sender?.name || 'Someone'} commented on your doubt: "${notification.doubt?.title || 'a doubt'}"`;
+      case 'like_doubt':
+        return `${notification.sender?.name || 'Someone'} liked your doubt: "${notification.doubt?.title || 'Untitled'}"`;
+      case 'like_comment':
+        return `${notification.sender?.name || 'Someone'} liked your comment`;
+      case 'tagged':
+        return `${notification.sender?.name || 'Someone'} tagged you in a comment`;
+      case 'like_hashtag':
+        return `${notification.sender?.name || 'Someone'} liked a hashtag (#${notification.hashtag}) you follow`;
+      default:
+        return 'You have a new notification';
+    }
+  };
+
   // Initialize socket connection
   useEffect(() => {
-   const newSocket = io(import.meta.env.VITE_API_URL, {
+    const newSocket = io(import.meta.env.VITE_API_URL, {
+      auth: { token: localStorage.getItem('ims_token') },
       withCredentials: true,
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
     });
     setSocket(newSocket);
+    newSocket.on('connect', () => console.log('Socket.IO connected:', newSocket.id));
+    newSocket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
     return () => newSocket.disconnect();
   }, []);
 
-  // Set up socket listeners
+  // Request notification permission
+  useEffect(() => {
+    if ('Notification' in window && notificationPermission !== 'granted' && notificationPermission !== 'denied') {
+      Notification.requestPermission().then((permission) => {
+        setNotificationPermission(permission);
+      }).catch((error) => {
+        console.error('Error requesting notification permission:', error);
+      });
+    }
+  }, [notificationPermission]);
+
+  // Register service worker and subscribe to push notifications
+  const registerServiceWorkerAndSubscribe = async () => {
+    if ('serviceWorker' in navigator && 'PushManager' in window && user?.userId) {
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js');
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY),
+        });
+
+        await axiosInstance.post('/push/subscribe', {
+          userId: user.userId,
+          subscription,
+        });
+        console.log('Push subscription successful');
+      } catch (err) {
+        console.error('Push subscription failed:', err);
+      }
+    } else {
+      console.error('Service worker or userId not available for push subscription');
+    }
+  };
+
+  const urlBase64ToUint8Array = (base64String) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+  };
+
+  // Set up socket listeners and push notifications
   useEffect(() => {
     if (!socket) return;
+
     socket.on('notification', (notification) => {
       setNotifications((prev) => [notification, ...prev]);
       setUnreadCount((prev) => prev + 1);
-      if (document.visibilityState !== 'visible' && 'Notification' in window) {
+      if (document.visibilityState !== 'visible' && notificationPermission === 'granted') {
         new Notification('New Notification', {
           body: generateNotificationMessage(notification),
+          icon: '/notification-icon.png',
+          tag: notification._id || Date.now().toString(),
         });
       }
+      fetchDoubts(); // Refresh doubts to include new activity
     });
-    return () => {
-      socket.off('notification');
-    };
-  }, [socket]);
 
-  // Request notification permission
-  useEffect(() => {
-    if ('Notification' in window) {
-      Notification.requestPermission();
+    // Register service worker and subscribe if user is authenticated
+    if (user?.userId) {
+      registerServiceWorkerAndSubscribe();
     }
-  }, []);
+
+    return () => socket.off('notification');
+  }, [socket, user, notificationPermission]);
 
   // Fetch doubts
   const fetchDoubts = useCallback(async (search = filters.search, hashtag = filters.hashtag) => {
@@ -205,7 +273,7 @@ const AdminDiscussion = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters]);
 
   // Debounced fetchDoubts
   const debouncedFetchDoubts = useCallback(debounce(fetchDoubts, 300), [fetchDoubts]);
@@ -1148,25 +1216,5 @@ const AdminDiscussion = () => {
     </div>
   );
 };
-
-// Helper function to generate notification messages
-function generateNotificationMessage(notification) {
-  switch (notification.type) {
-    case 'new_doubt':
-      return `${notification.sender?.name} posted a new doubt: "${notification.doubt?.title}"`;
-    case 'new_comment':
-      return `${notification.sender?.name} commented on your doubt: "${notification.doubt?.title}"`;
-    case 'like_doubt':
-      return `${notification.sender?.name} liked your doubt: "${notification.doubt?.title}"`;
-    case 'like_comment':
-      return `${notification.sender?.name} liked your comment`;
-    case 'tagged':
-      return `${notification.sender?.name} tagged you in a comment`;
-    case 'like_hashtag':
-      return `${notification.sender?.name} liked a hashtag (#${notification.hashtag}) you follow`;
-    default:
-      return 'You have a new notification';
-  }
-}
 
 export default AdminDiscussion;
