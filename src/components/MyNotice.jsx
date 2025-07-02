@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { Bell, Users, Calendar, Paperclip, X, Eye, Download, FileText, Image, File, ChevronDown, ChevronUp, Filter, AlertCircle } from 'lucide-react';
 import axiosInstance from '../utils/api';
 import io from 'socket.io-client';
+import { useAuth } from '../context/AuthContext';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 const SOCKET_URL = import.meta.env.VITE_API_URL;
@@ -18,21 +18,36 @@ const MyNotice = () => {
   const [filters, setFilters] = useState({
     audience: '',
     isImportant: '',
-    batchId: ''
+    batchId: '',
   });
   const [notificationPermission, setNotificationPermission] = useState(Notification?.permission || 'default');
+  const { user } = useAuth();
 
   // Initialize Socket.IO client
   const socket = io(SOCKET_URL, {
     auth: {
-      token: localStorage.getItem('ims_token') // Assumes JWT token is stored in localStorage
-    }
+      token: localStorage.getItem('ims_token'),
+    },
+    transports: ['websocket', 'polling'], // Fallback to polling if WebSocket fails
   });
 
   useEffect(() => {
+    // Debug Socket.IO connection
+    console.log('Socket URL:', SOCKET_URL);
+    console.log('Token:', localStorage.getItem('ims_token'));
+    console.log('User:', user);
+    socket.on('connect', () => console.log('Socket.IO connected:', socket.id));
+    socket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
+
     // Request notification permission
     requestNotificationPermission();
-     registerServiceWorkerAndSubscribe();
+
+    // Register service worker and subscribe if user is authenticated
+    if (user?.userId) {
+      registerServiceWorkerAndSubscribe();
+    } else {
+      console.error('No userId available, skipping push subscription');
+    }
 
     // Fetch user batches and join Socket.IO rooms
     fetchBatches();
@@ -44,7 +59,7 @@ const MyNotice = () => {
     socket.on('new-notice', (notice) => {
       if (isNoticeRelevant(notice)) {
         showBrowserNotification(notice);
-        fetchNotices(); // Refresh notices list
+        fetchNotices();
       }
     });
 
@@ -52,7 +67,7 @@ const MyNotice = () => {
     return () => {
       socket.disconnect();
     };
-  }, [filters]);
+  }, [filters, user]);
 
   const requestNotificationPermission = async () => {
     if ('Notification' in window && notificationPermission !== 'granted' && notificationPermission !== 'denied') {
@@ -64,62 +79,76 @@ const MyNotice = () => {
       }
     }
   };
-const registerServiceWorkerAndSubscribe = async () => {
+
+  const registerServiceWorkerAndSubscribe = async () => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       try {
         const registration = await navigator.serviceWorker.register('/sw.js');
-
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+          applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY),
         });
 
-        await axiosInstance.post('/push/subscribe', subscription);
-        console.log('Push subscribed & sent to server');
+        // Use user.userId from AuthContext
+        const userId = user.userId;
+        console.log('User ID for subscription:', userId);
+
+        if (!userId) {
+          console.error('User ID not found for push subscription');
+          return;
+        }
+
+        const response = await axiosInstance.post('/push/subscribe', {
+          userId,
+          subscription,
+        });
+        console.log('Push subscription response:', response.data);
       } catch (err) {
         console.error('Push subscription failed:', err);
       }
     }
   };
 
+  Ascending
   const urlBase64ToUint8Array = (base64String) => {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
     const rawData = atob(base64);
-    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
   };
 
   const isNoticeRelevant = (notice) => {
     if (notice.audience === 'all') return true;
     if (notice.audience === 'batch' && notice.batchIds) {
-      const userBatchIds = batches.map(batch => batch._id);
-      return notice.batchIds.some(batchId => userBatchIds.includes(batchId));
+      const userBatchIds = batches.map((batch) => batch._id);
+      return notice.batchIds.some((batchId) => userBatchIds.includes(batchId));
     }
     return false;
   };
 
- const showBrowserNotification = (notice) => {
-  console.log('Attempting to show notification:', notice);
-  if (notificationPermission === 'granted' && 'Notification' in window) {
-    const notification = new Notification(notice.title, {
-      body: notice.message,
-      icon: '/path/to/notification-icon.png',
-      tag: notice._id || Date.now().toString(),
-    });
-    console.log('Notification created:', notification);
-    notification.onclick = () => {
-      console.log('Notification clicked:', notice.title);
-      window.focus();
-    };
-  } else {
-    console.log('Notifications not shown. Permission:', notificationPermission);
-  }
-};
+  const showBrowserNotification = (notice) => {
+    console.log('Attempting to show notification:', notice);
+    if (notificationPermission === 'granted' && 'Notification' in window) {
+      const notification = new Notification(notice.title, {
+        body: notice.message,
+        icon: '/path/to/notification-icon.png',
+        tag: notice._id || Date.now().toString(),
+      });
+      console.log('Notification created:', notification);
+      notification.onclick = () => {
+        console.log('Notification clicked:', notice.title);
+        window.focus();
+      };
+    } else {
+      console.log('Notifications not shown. Permission:', notificationPermission);
+    }
+  };
+
   const fetchNotices = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      Object.keys(filters).forEach(key => {
+      Object.keys(filters).forEach((key) => {
         if (filters[key]) params.append(key, filters[key]);
       });
       params.append('status', 'active');
@@ -140,7 +169,7 @@ const registerServiceWorkerAndSubscribe = async () => {
       setBatches(userBatches);
 
       // Join Socket.IO rooms for each batch
-      userBatches.forEach(batch => {
+      userBatches.forEach((batch) => {
         socket.emit('joinBatch', batch._id);
       });
     } catch (error) {
@@ -155,12 +184,12 @@ const registerServiceWorkerAndSubscribe = async () => {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
   const openAttachmentModal = (attachments) => {
-    setSelectedAttachments(attachments.map(att => `${BASE_URL}/${att}`));
+    setSelectedAttachments(attachments.map((att) => `${BASE_URL}/${att}`));
     setShowAttachmentModal(true);
   };
 
@@ -219,7 +248,7 @@ const registerServiceWorkerAndSubscribe = async () => {
               {showFilters ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
             </button>
           </div>
-          
+
           <div className={`${showFilters ? 'block' : 'hidden'} sm:block`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <select
@@ -228,8 +257,10 @@ const registerServiceWorkerAndSubscribe = async () => {
                 className="border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
               >
                 <option value="">All Batches</option>
-                {batches.map(batch => (
-                  <option key={batch._id} value={batch._id}>{batch.name}</option>
+                {batches.map((batch) => (
+                  <option key={batch._id} value={batch._id}>
+                    {batch.name}
+                  </option>
                 ))}
               </select>
 
@@ -272,15 +303,16 @@ const registerServiceWorkerAndSubscribe = async () => {
                   <X size={24} />
                 </button>
               </div>
-              
+
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {selectedAttachments.map((attachment, index) => (
-                    <div key={index} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 hover:from-gray-100 hover:to-gray-200 transition-all duration-200 border border-gray-200">
+                    <div
+                      key={index}
+                      className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 hover:from-gray-100 hover:to-gray-200 transition-all duration-200 border border-gray-200"
+                    >
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="p-3 bg-white rounded-lg shadow-sm">
-                          {getFileIcon(attachment)}
-                        </div>
+                        <div className="p-3 bg-white rounded-lg shadow-sm">{getFileIcon(attachment)}</div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 truncate">{attachment.split('/').pop()}</p>
                           <p className="text-sm text-gray-500">Click to download</p>
@@ -319,7 +351,10 @@ const registerServiceWorkerAndSubscribe = async () => {
             <div className="text-center py-16">
               <div className="relative">
                 <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mx-auto"></div>
-                <div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-t-indigo-400 mx-auto animate-spin" style={{ animationDelay: '0.1s', animationDuration: '1.2s' }}></div>
+                <div
+                  className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-t-indigo-400 mx-auto animate-spin"
+                  style={{ animationDelay: '0.1s', animationDuration: '1.2s' }}
+                ></div>
               </div>
               <p className="text-gray-600 mt-6 font-medium">Loading notices...</p>
             </div>
@@ -332,12 +367,15 @@ const registerServiceWorkerAndSubscribe = async () => {
               <p className="text-gray-600">There are no notices available at this time</p>
             </div>
           ) : (
-            notices.map(notice => (
-              <div key={notice._id} className={`bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border-l-4 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-white/20 ${
-                notice.isImportant 
-                  ? 'border-l-red-500 bg-gradient-to-r from-red-50/50 to-transparent' 
-                  : 'border-l-blue-500 bg-gradient-to-r from-blue-50/50 to-transparent'
-              }`}>
+            notices.map((notice) => (
+              <div
+                key={notice._id}
+                className={`bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border-l-4 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-white/20 ${
+                  notice.isImportant
+                    ? 'border-l-red-500 bg-gradient-to-r from-red-50/50 to-transparent'
+                    : 'border-l-blue-500 bg-gradient-to-r from-blue-50/50 to-transparent'
+                }`}
+              >
                 <div className="p-4 sm:p-6">
                   <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
                     <div className="flex-1">
@@ -349,16 +387,18 @@ const registerServiceWorkerAndSubscribe = async () => {
                             Important
                           </span>
                         )}
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
-                          notice.audience === 'all' 
-                            ? 'bg-green-100 text-green-800 border-green-200' 
-                            : 'bg-blue-100 text-blue-800 border-blue-200'
-                        }`}>
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
+                            notice.audience === 'all'
+                              ? 'bg-green-100 text-green-800 border-green-200'
+                              : 'bg-blue-100 text-blue-800 border-blue-200'
+                          }`}
+                        >
                           <Users size={12} className="mr-1" />
                           {notice.audience === 'all' ? 'All Students' : 'Specific Batches'}
                         </span>
                       </div>
-                      
+
                       <div className="mb-4">
                         <p className="text-gray-700 leading-relaxed">
                           {expandedNotices.has(notice._id) ? notice.message : truncateMessage(notice.message)}
@@ -369,9 +409,13 @@ const registerServiceWorkerAndSubscribe = async () => {
                             className="text-blue-600 hover:text-blue-700 text-sm font-medium mt-2 flex items-center gap-1 transition-colors"
                           >
                             {expandedNotices.has(notice._id) ? (
-                              <>Show less <ChevronUp size={14} /></>
+                              <>
+                                Show less <ChevronUp size={14} />
+                              </>
                             ) : (
-                              <>Show more <ChevronDown size={14} /></>
+                              <>
+                                Show more <ChevronDown size={14} />
+                              </>
                             )}
                           </button>
                         )}
@@ -381,19 +425,24 @@ const registerServiceWorkerAndSubscribe = async () => {
                         <div className="mb-4">
                           <p className="text-sm font-semibold text-gray-600 mb-2">Target Batches:</p>
                           <div className="flex flex-wrap gap-2">
-                            {notice.batchIds.map(batch => (
-                              <span key={batch._id} className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-200">
+                            {notice.batchIds.map((batch) => (
+                              <span
+                                key={batch._id}
+                                className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-200"
+                              >
                                 {batch.name}
                               </span>
                             ))}
                           </div>
                         </div>
                       )}
-                      
+
                       {notice.attachments && notice.attachments.length > 0 && (
                         <div className="mb-4">
                           <div className="flex items-center justify-between mb-3">
-                            <p className="text-sm font-semibold text-gray-600">Attachments ({notice.attachments.length}):</p>
+                            <p className="text-sm font-semibold text-gray-600">
+                              Attachments ({notice.attachments.length}):
+                            </p>
                             <button
                               onClick={() => openAttachmentModal(notice.attachments)}
                               className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1 transition-colors ml-2"
@@ -420,7 +469,7 @@ const registerServiceWorkerAndSubscribe = async () => {
                           </div>
                         </div>
                       )}
-                      
+
                       <div className="flex flex-col sm:flex-row sm:items-center text-sm text-gray-500 space-y-2 sm:space-y-0 sm:space-x-4">
                         <span className="flex items-center">
                           <Calendar size={14} className="mr-1" />
