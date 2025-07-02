@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Plus, Archive, Trash2, Edit, AlertCircle, Users, Calendar, Paperclip, X, Send, Filter, ArchiveRestore, Eye, Download, FileText, Image, File, ChevronDown, ChevronUp } from 'lucide-react';
 import axiosInstance from '../utils/api';
+import io from 'socket.io-client';
 
 const BASE_URL = import.meta.env.VITE_API_URL; // Backend base URL for file serving
+const SOCKET_URL = import.meta.env.VITE_API_URL; // Socket.IO server URL
 
 const Notice = () => {
   const [notices, setNotices] = useState([]);
@@ -31,9 +33,35 @@ const Notice = () => {
     attachments: []
   });
 
+  // Initialize Socket.IO client
+  const socket = io(SOCKET_URL, {
+    auth: {
+      token: localStorage.getItem('ims_token') // Assumes JWT token is stored in localStorage
+    }
+  });
+
   useEffect(() => {
+    // Fetch initial notices and batches
     fetchNotices();
     fetchBatches();
+
+    // Join general room for all notices
+    socket.emit('joinGeneral');
+
+    // Listen for new notice events
+    socket.on('new-notice', (notice) => {
+      fetchNotices(); // Refresh notices list
+    });
+
+    // Listen for updated notice events
+    socket.on('update-notice', (updatedNotice) => {
+      fetchNotices(); // Refresh notices list
+    });
+
+    // Cleanup Socket.IO connection
+    return () => {
+      socket.disconnect();
+    };
   }, [filters]);
 
   const fetchNotices = async () => {
@@ -56,7 +84,13 @@ const Notice = () => {
   const fetchBatches = async () => {
     try {
       const response = await axiosInstance.get('/batches');
-      setBatches(response.data.data || []);
+      const batchData = response.data.data || [];
+      setBatches(batchData);
+
+      // Join batch rooms for admin (optional, if admin needs to monitor specific batches)
+      batchData.forEach(batch => {
+        socket.emit('joinBatch', batch._id);
+      });
     } catch (error) {
       console.error('Error fetching batches:', error);
       setBatches([]);
@@ -84,8 +118,15 @@ const Notice = () => {
         formDataToSend.append('attachments', file);
       });
 
-      await axiosInstance.post('/notices', formDataToSend, {
+      const response = await axiosInstance.post('/notices', formDataToSend, {
         headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      // Emit new notice event to Socket.IO
+      socket.emit('new-notice', {
+        ...response.data,
+        audience: formData.audience,
+        batchIds: formData.audience === 'batch' ? formData.batchIds : []
       });
 
       setShowCreateForm(false);
@@ -104,14 +145,21 @@ const Notice = () => {
       return;
     }
     try {
-      await axiosInstance.put(`/notices/${editingNotice._id}`, {
+      const response = await axiosInstance.put(`/notices/${editingNotice._id}`, {
         title: formData.title,
         message: formData.message,
         audience: formData.audience,
         batchIds: formData.audience === 'batch' ? formData.batchIds : [],
         isImportant: formData.isImportant
       });
-      
+
+      // Emit update notice event to Socket.IO
+      socket.emit('update-notice', {
+        ...response.data,
+        audience: formData.audience,
+        batchIds: formData.audience === 'batch' ? formData.batchIds : []
+      });
+
       setEditingNotice(null);
       resetForm();
       fetchNotices();
@@ -190,7 +238,6 @@ const Notice = () => {
   };
 
   const openAttachmentModal = (attachments) => {
-    // Prepend BASE_URL to each attachment URL
     setSelectedAttachments(attachments.map(att => `${BASE_URL}/${att}`));
     setShowAttachmentModal(true);
   };
@@ -477,7 +524,7 @@ const Notice = () => {
                   Attachments ({selectedAttachments.length})
                 </h3>
                 <button
-                  onClick={() => setShowAttachmentModal(false)}
+                  onClick={() => setShowAttackModal(false)}
                   className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl transition-all duration-200"
                 >
                   <X size={24} />

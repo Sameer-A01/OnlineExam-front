@@ -25,13 +25,14 @@ const MyNotice = () => {
   // Initialize Socket.IO client
   const socket = io(SOCKET_URL, {
     auth: {
-      token: localStorage.getItem('token') // Assumes JWT token is stored in localStorage
+      token: localStorage.getItem('ims_token') // Assumes JWT token is stored in localStorage
     }
   });
 
   useEffect(() => {
     // Request notification permission
     requestNotificationPermission();
+     registerServiceWorkerAndSubscribe();
 
     // Fetch user batches and join Socket.IO rooms
     fetchBatches();
@@ -62,6 +63,30 @@ const MyNotice = () => {
         console.error('Error requesting notification permission:', error);
       }
     }
+  };
+const registerServiceWorkerAndSubscribe = async () => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js');
+
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+        });
+
+        await axiosInstance.post('/api/push/subscribe', subscription);
+        console.log('Push subscribed & sent to server');
+      } catch (err) {
+        console.error('Push subscription failed:', err);
+      }
+    }
+  };
+
+  const urlBase64ToUint8Array = (base64String) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
   };
 
   const isNoticeRelevant = (notice) => {
