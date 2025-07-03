@@ -12,8 +12,8 @@ const Sidebar = ({ onCollapseChange }) => {
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: <FaTachometerAlt />, isParent: true },
     { name: 'Exam', path: '/admin-dashboard/exam', icon: <FaPenFancy />, isParent: false },
-    { name: 'Results', path: '/admin-dashboard/results', icon: <FaMedal />, isParent: false },
-    { name: 'Results', path: '/admin-dashboard/ResultList', icon: <FaMedal />, isParent: false },
+    // { name: 'Results', path: '/admin-dashboard/results', icon: <FaMedal />, isParent: false },
+    // { name: 'Results', path: '/admin-dashboard/ResultList', icon: <FaMedal />, isParent: false },
     { name: 'Students', path: '/admin-dashboard/users', icon: <FaUserGraduate />, isParent: false },
     { name: 'Courses', path: '/admin-dashboard/Courses', icon: <FaBookOpen />, isParent: false },
     { name: 'Instructors', path: '/admin-dashboard/Instructors', icon: <FaChalkboardTeacher />, isParent: false },
