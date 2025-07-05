@@ -1153,7 +1153,7 @@ const AdminDiscussion = () => {
                           )}
                           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs sm:text-sm gap-3 sm:gap-0">
                             <div className="flex flex-wrap items-center space-x-2 sm:space-x-4 text-gray-500">
-                              <div className="flex items-center gap-1.5 sm:gap-2">
+                              <div className="flex items-center gap-1.5 sm:gap-2 ">
                                 {renderAuthor(doubt.author)}
                               </div>
                               {doubt.batch && (
