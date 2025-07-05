@@ -1024,11 +1024,11 @@ const AdminDiscussion = () => {
                       setShowMostLiked(false);
                       setShowBookmarks(false);
                     }
-                    toast.success(isSidebarOpen ? 'Sidebar hidden!' : 'Sidebar opened!', {
-                      duration: 3000,
-                      position: 'top-right',
-                      icon: isSidebarOpen ? '🔙' : '📜',
-                    });
+                    // toast.success(isSidebarOpen ? 'Sidebar hidden!' : 'Sidebar opened!', {
+                    //   duration: 3000,
+                    //   position: 'top-right',
+                    //   icon: isSidebarOpen ? '🔙' : '📜',
+                    // });
                   }}
                   className="lg:hidden group relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
                 >

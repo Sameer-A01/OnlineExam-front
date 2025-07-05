@@ -902,12 +902,12 @@ const UserDiscussion = () => {
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (isMobileMenuOpen && !event.target.closest('.mobile-menu-container')) {
-        setIsMobileMenuOpen(false);
-        toast.success('Mobile menu closed.', {
-          duration: 3000,
-          position: 'top-right',
-          icon: '🔙',
-        });
+        // setIsMobileMenuOpen(false);
+        // toast.success('Mobile menu closed.', {
+        //   duration: 3000,
+        //   position: 'top-right',
+        //   icon: '🔙',
+        // });
       }
     };
 
@@ -980,11 +980,11 @@ const UserDiscussion = () => {
             <button
               onClick={() => {
                 setIsMobileMenuOpen(!isMobileMenuOpen);
-                toast.success(isMobileMenuOpen ? 'Mobile menu closed!' : 'Mobile menu opened!', {
-                  duration: 3000,
-                  position: 'top-right',
-                  icon: isMobileMenuOpen ? '🔙' : '📜',
-                });
+                // toast.success(isMobileMenuOpen ? 'Mobile menu closed!' : 'Mobile menu opened!', {
+                //   duration: 3000,
+                //   position: 'top-right',
+                //   icon: isMobileMenuOpen ? '🔙' : '📜',
+                // });
               }}
               className="p-2 rounded-lg bg-white shadow-md"
             >
@@ -1301,11 +1301,11 @@ const UserDiscussion = () => {
                       setShowMostLiked(false);
                       setShowBookmarks(false);
                     }
-                    toast.success(isSidebarOpen ? 'Sidebar hidden!' : 'Sidebar opened!', {
-                      duration: 3000,
-                      position: 'top-right',
-                      icon: isSidebarOpen ? '🔙' : '📜',
-                    });
+                    // toast.success(isSidebarOpen ? 'Sidebar hidden!' : 'Sidebar opened!', {
+                    //   duration: 3000,
+                    //   position: 'top-right',
+                    //   icon: isSidebarOpen ? '🔙' : '📜',
+                    // });
                   }}
                   className="lg:hidden group relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
                 >
