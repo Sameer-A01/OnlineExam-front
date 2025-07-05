@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import axiosInstance from '../utils/api';
 import { io } from 'socket.io-client';
@@ -34,6 +35,7 @@ import {
   Download,
   Menu,
 } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
 // Attachment Popup Component
 const AttachmentPopup = ({ file, onClose }) => {
@@ -202,6 +204,10 @@ const UserDiscussion = () => {
         setNotificationPermission(permission);
       }).catch((error) => {
         console.error('Error requesting notification permission:', error);
+        toast.error('Failed to request notification permission.', {
+          duration: 4000,
+          position: 'top-right',
+        });
       });
     }
   }, [notificationPermission]);
@@ -220,12 +226,25 @@ const UserDiscussion = () => {
           userId: user.userId,
           subscription,
         });
-        console.log('Push subscription successful');
+        // console.log('Push subscription successful');
+        // toast.success('Subscribed to push notifications!', {
+        //   duration: 4000,
+        //   position: 'top-right',
+        //   icon: '🔔',
+        // });
       } catch (err) {
         console.error('Push subscription failed:', err);
+        toast.error('Failed to subscribe to push notifications.', {
+          duration: 4000,
+          position: 'top-right',
+        });
       }
     } else {
       console.error('Service worker or userId not available for push subscription');
+      toast.error('Push notifications not supported.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -250,10 +269,14 @@ const UserDiscussion = () => {
           tag: notification._id || Date.now().toString(),
         });
       }
-      fetchDoubts(); // Refresh doubts to include new activity
+      fetchDoubts();
+      toast.success('New notification received!', {
+        duration: 3000,
+        position: 'top-right',
+        icon: '🔔',
+      });
     });
 
-    // Register service worker and subscribe if user is authenticated
     if (user?.userId) {
       registerServiceWorkerAndSubscribe();
     }
@@ -272,6 +295,10 @@ const UserDiscussion = () => {
       setDoubts(data.doubts || []);
     } catch (error) {
       console.error('Failed to fetch doubts:', error);
+      toast.error('Failed to fetch doubts. Please try again.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     } finally {
       setLoading(false);
     }
@@ -289,6 +316,10 @@ const UserDiscussion = () => {
       setMyDoubts(doubts);
     } catch (error) {
       console.error('Failed to fetch my doubts:', error);
+      toast.error('Failed to fetch your doubts.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -299,6 +330,10 @@ const UserDiscussion = () => {
       setPopularHashtags(data);
     } catch (error) {
       console.error('Failed to fetch popular hashtags:', error);
+      toast.error('Failed to fetch popular hashtags.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -309,6 +344,10 @@ const UserDiscussion = () => {
       setMostLikedQuestions(data);
     } catch (error) {
       console.error('Failed to fetch most liked questions:', error);
+      toast.error('Failed to fetch most liked questions.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -319,6 +358,10 @@ const UserDiscussion = () => {
       setBookmarkedDoubts(data);
     } catch (error) {
       console.error('Failed to fetch bookmarked doubts:', error);
+      toast.error('Failed to fetch bookmarked doubts.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -330,6 +373,10 @@ const UserDiscussion = () => {
       setUnreadCount(notifications.filter((n) => !n.isRead).length);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
+      toast.error('Failed to fetch notifications.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -339,8 +386,17 @@ const UserDiscussion = () => {
       await axiosInstance.put('/discussions/notifications/mark-all-read');
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
+      toast.success('All notifications marked as read!', {
+        duration: 4000,
+        position: 'top-right',
+        icon: '✅',
+      });
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error);
+      toast.error('Failed to mark all notifications as read.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -351,6 +407,10 @@ const UserDiscussion = () => {
       setComments(comments);
     } catch (error) {
       console.error('Failed to fetch comments:', error);
+      toast.error('Failed to fetch comments.', {
+        duration: 4000,
+        position: 'top-right',
+      });
       setComments([]);
     }
   };
@@ -379,15 +439,27 @@ const UserDiscussion = () => {
       );
       setSelectedDoubt(data);
       fetchComments(doubt._id);
+      // toast.success(`Viewing doubt: ${doubt.title}`, {
+      //   duration: 3000,
+      //   position: 'top-right',
+      //   icon: '📖',
+      // });
     } catch (error) {
       console.error('Failed to view doubt:', error);
+      toast.error('Failed to view doubt.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
   // Create doubt
   const handleCreateDoubt = async () => {
     if (!newDoubt.title.trim() || !newDoubt.content.trim()) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields.', {
+        duration: 4000,
+        position: 'top-right',
+      });
       return;
     }
     try {
@@ -408,15 +480,22 @@ const UserDiscussion = () => {
       setShowCreateForm(false);
       fetchDoubts();
       fetchMyDoubts();
-      // Emit a socket event to trigger notification
       socket.emit('newDoubt', {
         doubt: response.data.doubt,
         sender: { _id: user.userId, name: user.name },
         type: 'new_doubt',
       });
+      toast.success('Doubt posted successfully!', {
+        duration: 4000,
+        position: 'top-right',
+        icon: '🎉',
+      });
     } catch (error) {
       console.error('Failed to create doubt:', error);
-      alert(error.response?.data?.message || 'Error creating doubt. Please try again.');
+      toast.error(error.response?.data?.message || 'Error creating doubt. Please try again.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -430,9 +509,17 @@ const UserDiscussion = () => {
       if (selectedDoubt?._id === doubtId) {
         setSelectedDoubt(null);
       }
+      toast.success('Doubt deleted successfully!', {
+        duration: 4000,
+        position: 'top-right',
+        icon: '🗑️',
+      });
     } catch (error) {
       console.error('Failed to delete doubt:', error);
-      alert(error.response?.data?.message || 'Failed to delete doubt. Please try again.');
+      toast.error(error.response?.data?.message || 'Failed to delete doubt. Please try again.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -442,6 +529,16 @@ const UserDiscussion = () => {
       const tag = hashtagInput.trim().toLowerCase();
       if (!currentHashtags.includes(tag)) {
         setCurrentHashtags([...currentHashtags, tag]);
+        toast.success(`Added hashtag: #${tag}`, {
+          duration: 3000,
+          position: 'top-right',
+          icon: '🏷️',
+        });
+      } else {
+        toast.error(`Hashtag #${tag} is already added.`, {
+          duration: 3000,
+          position: 'top-right',
+        });
       }
       setHashtagInput('');
     }
@@ -449,7 +546,13 @@ const UserDiscussion = () => {
 
   // Remove hashtag
   const removeHashtag = (index) => {
+    const tag = currentHashtags[index];
     setCurrentHashtags(currentHashtags.filter((_, i) => i !== index));
+    toast.success(`Removed hashtag: #${tag}`, {
+      duration: 3000,
+      position: 'top-right',
+      icon: '🗑️',
+    });
   };
 
   // Like doubt
@@ -498,8 +601,20 @@ const UserDiscussion = () => {
       if (selectedDoubt?._id === doubtId) {
         setSelectedDoubt((prev) => ({ ...prev, likes: data.likes }));
       }
+      toast.success(
+        data.likes.includes(user?.userId) ? 'Doubt liked!' : 'Doubt unliked!',
+        {
+          duration: 3000,
+          position: 'top-right',
+          icon: data.likes.includes(user?.userId) ? '❤️' : '↩️',
+        }
+      );
     } catch (error) {
       console.error('Failed to like doubt:', error);
+      toast.error('Failed to update like status.', {
+        duration: 4000,
+        position: 'top-right',
+      });
       setDoubts((prev) =>
         prev.map((d) =>
           d._id === doubtId
@@ -556,12 +671,26 @@ const UserDiscussion = () => {
           d._id === doubtId ? { ...d, isBookmarked: data.bookmarked } : d
         )
       );
+      toast.success(
+        data.bookmarked ? 'Doubt bookmarked!' : 'Doubt removed from bookmarks!',
+        {
+          duration: 3000,
+          position: 'top-right',
+          icon: data.bookmarked ? '🔖' : '↩️',
+        }
+      );
     } catch (error) {
       console.error('Failed to bookmark doubt:', error);
       if (error.response?.status === 401) {
-        alert('Please login to bookmark doubts');
+        toast.error('Please login to bookmark doubts.', {
+          duration: 4000,
+          position: 'top-right',
+        });
       } else {
-        alert('Failed to bookmark. Please try again later.');
+        toast.error('Failed to bookmark. Please try again later.', {
+          duration: 4000,
+          position: 'top-right',
+        });
       }
     }
   };
@@ -571,15 +700,27 @@ const UserDiscussion = () => {
     try {
       await axiosInstance.put(`/discussions/hashtags/${hashtagName}/like`);
       fetchPopularHashtags();
+      toast.success(`Hashtag #${hashtagName} liked!`, {
+        duration: 3000,
+        position: 'top-right',
+        icon: '❤️',
+      });
     } catch (error) {
       console.error('Failed to like hashtag:', error);
+      toast.error('Failed to like hashtag.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
   // Create comment with attachments
   const handleCreateComment = async (doubtId) => {
     if (!newComment.trim() && commentAttachments.length === 0) {
-      alert('Please provide a comment or attach a file.');
+      toast.error('Please provide a comment or attach a file.', {
+        duration: 4000,
+        position: 'top-right',
+      });
       return;
     }
     try {
@@ -595,9 +736,17 @@ const UserDiscussion = () => {
       setCommentAttachments([]);
       fetchComments(doubtId);
       fetchDoubts();
+      toast.success('Comment posted successfully!', {
+        duration: 4000,
+        position: 'top-right',
+        icon: '💬',
+      });
     } catch (error) {
       console.error('Failed to create comment:', error);
-      alert(error.response?.data?.message || 'Error posting comment. Please try again.');
+      toast.error(error.response?.data?.message || 'Error posting comment. Please try again.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -606,8 +755,17 @@ const UserDiscussion = () => {
     try {
       await axiosInstance.put(`/discussions/comments/${commentId}/like`);
       fetchComments(doubtId);
+      toast.success('Comment liked!', {
+        duration: 3000,
+        position: 'top-right',
+        icon: '❤️',
+      });
     } catch (error) {
       console.error('Failed to like comment:', error);
+      toast.error('Failed to like comment.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -619,10 +777,17 @@ const UserDiscussion = () => {
       if (selectedDoubt?._id === doubtId) {
         setSelectedDoubt((prev) => ({ ...prev, isPinned: !prev.isPinned }));
       }
-      alert(response.data.message);
+      toast.success(response.data.message, {
+        duration: 4000,
+        position: 'top-right',
+        icon: '📌',
+      });
     } catch (error) {
       console.error('Error pinning/unpinning doubt:', error);
-      alert('Error updating pin status. Please try again.');
+      toast.error('Error updating pin status. Please try again.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -634,10 +799,17 @@ const UserDiscussion = () => {
       if (selectedDoubt?._id === doubtId) {
         setSelectedDoubt((prev) => ({ ...prev, isResolved: !prev.isResolved }));
       }
-      alert(response.data.message);
+      toast.success(response.data.message, {
+        duration: 4000,
+        position: 'top-right',
+        icon: '✅',
+      });
     } catch (error) {
       console.error('Error resolving/unresolving doubt:', error);
-      alert('Error updating resolve status. Please try again.');
+      toast.error('Error updating resolve status. Please try again.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -651,8 +823,17 @@ const UserDiscussion = () => {
         )
       );
       setUnreadCount((prev) => prev - 1);
+      toast.success('Notification marked as read.', {
+        duration: 3000,
+        position: 'top-right',
+        icon: '✅',
+      });
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
+      toast.error('Failed to mark notification as read.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
@@ -663,26 +844,58 @@ const UserDiscussion = () => {
     setShowPopularHashtags(false);
     setShowMostLiked(false);
     setShowBookmarks(false);
+    toast.success(`Filtering by hashtag: #${tag}`, {
+      duration: 3000,
+      position: 'top-right',
+      icon: '🏷️',
+    });
   };
 
   // Handle file upload for doubts
   const handleFileChange = (e) => {
-    setNewDoubt({ ...newDoubt, attachments: Array.from(e.target.files) });
+    const files = Array.from(e.target.files);
+    setNewDoubt({ ...newDoubt, attachments: files });
+    if (files.length > 0) {
+      toast.success(`${files.length} file(s) selected for upload.`, {
+        duration: 3000,
+        position: 'top-right',
+        icon: '📎',
+      });
+    }
   };
 
   // Handle file upload for comments
   const handleCommentFileChange = (e) => {
-    setCommentAttachments(Array.from(e.target.files));
+    const files = Array.from(e.target.files);
+    setCommentAttachments(files);
+    if (files.length > 0) {
+      toast.success(`${files.length} file(s) selected for comment.`, {
+        duration: 3000,
+        position: 'top-right',
+        icon: '📎',
+      });
+    }
   };
 
   // Remove comment attachment
   const removeCommentAttachment = (index) => {
+    const fileName = commentAttachments[index].name;
     setCommentAttachments(commentAttachments.filter((_, i) => i !== index));
+    toast.success(`Removed attachment: ${fileName}`, {
+      duration: 3000,
+      position: 'top-right',
+      icon: '🗑️',
+    });
   };
 
   // Handle attachment click
   const handleAttachmentClick = (file) => {
     setSelectedAttachment(file);
+    toast.success(`Viewing attachment: ${file.url.split('/').pop()}`, {
+      duration: 3000,
+      position: 'top-right',
+      icon: '📂',
+    });
   };
 
   // Close mobile menu when clicking outside
@@ -690,6 +903,11 @@ const UserDiscussion = () => {
     const handleClickOutside = (event) => {
       if (isMobileMenuOpen && !event.target.closest('.mobile-menu-container')) {
         setIsMobileMenuOpen(false);
+        toast.success('Mobile menu closed.', {
+          duration: 3000,
+          position: 'top-right',
+          icon: '🔙',
+        });
       }
     };
 
@@ -705,6 +923,46 @@ const UserDiscussion = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toaster Component for Notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            borderRadius: '12px',
+            background: '#ffffff',
+            color: '#333',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+            padding: '12px 16px',
+            fontSize: '14px',
+            fontWeight: '500',
+            border: '1px solid rgba(0, 0, 0, 0.05)',
+            maxWidth: '400px',
+          },
+          success: {
+            style: {
+              background: 'linear-gradient(135deg, #e6fffa 0%, #ccfbf1 100%)',
+              border: '1px solid #5eead4',
+              color: '#115e59',
+            },
+            iconTheme: {
+              primary: '#115e59',
+              secondary: '#e6fffa',
+            },
+          },
+          error: {
+            style: {
+              background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+              border: '1px solid #f87171',
+              color: '#991b1b',
+            },
+            iconTheme: {
+              primary: '#991b1b',
+              secondary: '#fee2e2',
+            },
+          },
+        }}
+      />
+
       {/* Header */}
       <UserHeader
         showNotifications={showNotifications}
@@ -720,13 +978,27 @@ const UserDiscussion = () => {
           {/* Mobile Menu Button */}
           <div className="lg:hidden flex justify-between items-center mb-4">
             <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              onClick={() => {
+                setIsMobileMenuOpen(!isMobileMenuOpen);
+                toast.success(isMobileMenuOpen ? 'Mobile menu closed!' : 'Mobile menu opened!', {
+                  duration: 3000,
+                  position: 'top-right',
+                  icon: isMobileMenuOpen ? '🔙' : '📜',
+                });
+              }}
               className="p-2 rounded-lg bg-white shadow-md"
             >
               <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700" />
             </button>
             <button
-              onClick={() => setShowCreateForm(true)}
+              onClick={() => {
+                setShowCreateForm(true);
+                toast.success('Opened doubt creation form.', {
+                  duration: 3000,
+                  position: 'top-right',
+                  icon: '✍️',
+                });
+              }}
               className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
             >
               <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -744,6 +1016,11 @@ const UserDiscussion = () => {
                     setShowPopularHashtags(false);
                     setShowMostLiked(false);
                     setShowBookmarks(false);
+                    toast.success(showMyDoubts ? 'Hid My Doubts' : 'Showing My Doubts', {
+                      duration: 3000,
+                      position: 'top-right',
+                      icon: '📋',
+                    });
                   }}
                   className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-left flex items-center justify-between text-sm sm:text-base ${
                     showMyDoubts ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
@@ -783,6 +1060,11 @@ const UserDiscussion = () => {
                     setShowMyDoubts(false);
                     setShowMostLiked(false);
                     setShowBookmarks(false);
+                    toast.success(showPopularHashtags ? 'Hid Popular Hashtags' : 'Showing Popular Hashtags', {
+                      duration: 3000,
+                      position: 'top-right',
+                      icon: '🏷️',
+                    });
                   }}
                   className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-left flex items-center justify-between text-sm sm:text-base ${
                     showPopularHashtags ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
@@ -837,6 +1119,11 @@ const UserDiscussion = () => {
                     setShowMyDoubts(false);
                     setShowPopularHashtags(false);
                     setShowBookmarks(false);
+                    toast.success(showMostLiked ? 'Hid Most Liked' : 'Showing Most Liked', {
+                      duration: 3000,
+                      position: 'top-right',
+                      icon: '❤️',
+                    });
                   }}
                   className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-left flex items-center justify-between text-sm sm:text-base ${
                     showMostLiked ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
@@ -880,6 +1167,11 @@ const UserDiscussion = () => {
                     setShowMyDoubts(false);
                     setShowPopularHashtags(false);
                     setShowMostLiked(false);
+                    toast.success(showBookmarks ? 'Hid Bookmarks' : 'Showing Bookmarks', {
+                      duration: 3000,
+                      position: 'top-right',
+                      icon: '🔖',
+                    });
                   }}
                   className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-left flex items-center justify-between text-sm sm:text-base ${
                     showBookmarks ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
@@ -983,6 +1275,11 @@ const UserDiscussion = () => {
                     setShowPopularHashtags(false);
                     setShowMostLiked(false);
                     setShowBookmarks(false);
+                    toast.success('Filters cleared!', {
+                      duration: 3000,
+                      position: 'top-right',
+                      icon: '🧹',
+                    });
                   }}
                   className="group relative px-4 sm:px-6 py-2 sm:py-3 text-gray-600 hover:text-white transition-all duration-300 rounded-xl overflow-hidden text-sm sm:text-base"
                 >
@@ -1004,6 +1301,11 @@ const UserDiscussion = () => {
                       setShowMostLiked(false);
                       setShowBookmarks(false);
                     }
+                    toast.success(isSidebarOpen ? 'Sidebar hidden!' : 'Sidebar opened!', {
+                      duration: 3000,
+                      position: 'top-right',
+                      icon: isSidebarOpen ? '🔙' : '📜',
+                    });
                   }}
                   className="lg:hidden group relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
                 >
@@ -1030,7 +1332,14 @@ const UserDiscussion = () => {
                   </p>
                   {(filters.search || filters.hashtag) && (
                     <button
-                      onClick={() => setFilters({ search: '', hashtag: '' })}
+                      onClick={() => {
+                        setFilters({ search: '', hashtag: '' });
+                        toast.success('Showing all doubts!', {
+                          duration: 3000,
+                          position: 'top-right',
+                          icon: '📚',
+                        });
+                      }}
                       className="group relative px-6 sm:px-8 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
                     >
                       <div className="absolute inset-0 bg-white/20 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
@@ -1266,7 +1575,14 @@ const UserDiscussion = () => {
               <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <h2 className="text-lg sm:text-xl font-semibold">Ask a Doubt</h2>
                 <button
-                  onClick={() => setShowCreateForm(false)}
+                  onClick={() => {
+                    setShowCreateForm(false);
+                    toast.success('Create doubt form closed.', {
+                      duration: 3000,
+                      position: 'top-right',
+                      icon: '🔙',
+                    });
+                  }}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -1299,35 +1615,62 @@ const UserDiscussion = () => {
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                    Hashtags
-                  </label>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                    {currentHashtags.map((tag, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center bg-blue-100 text-blue-800 px-1.5 sm:px-2 py-0.5 rounded-full text-xs"
-                      >
-                        #{tag}
-                        <button
-                          onClick={() => removeHashtag(index)}
-                          className="ml-1 text-blue-600 hover:text-blue-800"
-                        >
-                          <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <input
-                    type="text"
-                    value={hashtagInput}
-                    onChange={(e) => setHashtagInput(e.target.value)}
-                    onKeyDown={handleHashtagKeyDown}
-                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
-                    placeholder="Type a hashtag and press Enter"
-                  />
-                </div>
+               <div>
+  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+    Hashtags
+  </label>
+  <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+    {currentHashtags.map((tag, index) => (
+      <div
+        key={index}
+        className="flex items-center bg-blue-100 text-blue-800 px-1.5 sm:px-2 py-0.5 rounded-full text-xs"
+      >
+        #{tag}
+        <button
+          onClick={() => removeHashtag(index)}
+          className="ml-1 text-blue-600 hover:text-blue-800"
+        >
+          <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+        </button>
+      </div>
+    ))}
+  </div>
+  <div className="flex items-center space-x-2 sm:space-x-3">
+    <input
+      type="text"
+      value={hashtagInput}
+      onChange={(e) => setHashtagInput(e.target.value)}
+      onKeyDown={handleHashtagKeyDown}
+      className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+      placeholder="Type a hashtag..."
+    />
+    <button
+      onClick={() => {
+        if (hashtagInput.trim()) {
+          const tag = hashtagInput.trim().toLowerCase();
+          if (!currentHashtags.includes(tag)) {
+            setCurrentHashtags([...currentHashtags, tag]);
+            toast.success(`Added hashtag: #${tag}`, {
+              duration: 3000,
+              position: 'top-right',
+              icon: '🏷️',
+            });
+          } else {
+            toast.error(`Hashtag #${tag} is already added.`, {
+              duration: 3000,
+              position: 'top-right',
+            });
+          }
+          setHashtagInput('');
+        }
+      }}
+      className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base flex items-center"
+    >
+      <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+      Add
+    </button>
+  </div>
+</div>
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     Attachments
@@ -1356,7 +1699,14 @@ const UserDiscussion = () => {
                 <div className="flex justify-end space-x-2 sm:space-x-3 pt-3 sm:pt-4">
                   <button
                     type="button"
-                    onClick={() => setShowCreateForm(false)}
+                    onClick={() => {
+                      setShowCreateForm(false);
+                      toast.success('Create doubt form closed.', {
+                        duration: 3000,
+                        position: 'top-right',
+                        icon: '🔙',
+                      });
+                    }}
                     className="px-3 sm:px-4 py-1.5 sm:py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm sm:text-base"
                   >
                     Cancel
@@ -1415,20 +1765,6 @@ const UserDiscussion = () => {
             opacity: 1;
             transform: translateY(0);
           }
-        }
-
-        .line-clamp-2 {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-
-        .line-clamp-3 {
-          display: -webkit-box;
-          -webkit-line-clamp: 3;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
         }
       `}</style>
     </div>

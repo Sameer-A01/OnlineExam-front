@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axiosInstance from '../utils/api';
@@ -344,7 +343,7 @@ const Profile = () => {
 
                 <div className="p-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
+                    <div className="space-y-4 the">
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
                           Batch Name
@@ -461,6 +460,11 @@ const Profile = () => {
             )}
           </div>
         </div>
+
+        {/* Footer */}
+        <footer className="mt-12 py-6 text-center text-gray-600">
+          <p>Designed and Developed by <a href="https://webaziz.in" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 transition-colors duration-200">webaziz.in</a></p>
+        </footer>
       </div>
     </div>
   );
