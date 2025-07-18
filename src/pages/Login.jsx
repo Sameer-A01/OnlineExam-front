@@ -328,19 +328,7 @@ const Login = () => {
       )}
 
       {/* Footer */}
-      <footer className="w-full py-3 text-center">
-        <p className="text-xs text-gray-500">
-          Designed and developed by{" "}
-          <a
-            href="https://webaziz.in"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-600 hover:text-green-700 font-medium transition-colors duration-200"
-          >
-            webaziz.in
-          </a>
-        </p>
-      </footer>
+    
     </div>
   );
 };
