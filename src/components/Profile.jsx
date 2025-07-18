@@ -462,9 +462,9 @@ const Profile = () => {
         </div>
 
         {/* Footer */}
-        <footer className="mt-12 py-6 text-center text-gray-600">
+        {/* <footer className="mt-12 py-6 text-center text-gray-600">
           <p>Designed and Developed by <a href="https://webaziz.in" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 transition-colors duration-200">webaziz.in</a></p>
-        </footer>
+        </footer> */}
       </div>
     </div>
   );
