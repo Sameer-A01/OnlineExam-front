@@ -7,7 +7,7 @@ import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 
 // Backend base URL (adjust if your backend runs on a different port or domain)
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const StudentExamPortal = () => {
   const [upcomingExams, setUpcomingExams] = useState([]);
