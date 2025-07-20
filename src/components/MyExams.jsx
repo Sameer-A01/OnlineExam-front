@@ -6,6 +6,9 @@ import { useAuth } from '../context/AuthContext';
 import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 
+// Backend base URL (adjust if your backend runs on a different port or domain)
+const BASE_URL = 'http://localhost:5000';
+
 const StudentExamPortal = () => {
   const [upcomingExams, setUpcomingExams] = useState([]);
   const [attemptStatus, setAttemptStatus] = useState({});
@@ -24,7 +27,7 @@ const StudentExamPortal = () => {
   const [questionTimeMap, setQuestionTimeMap] = useState({});
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [isNavigatorOpen, setIsNavigatorOpen] = useState(false); // For mobile navigator toggle
-  const sections = ['Physics', 'Chemistry', 'Math'];
+  const sections = ['Physics', 'Chemistry', 'Math', 'Biology'];
 
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -523,7 +526,7 @@ const StudentExamPortal = () => {
             <h2 className="text-base sm:text-lg font-semibold mb-2">Instructions:</h2>
             <ul className="list-disc pl-4 sm:pl-6 space-y-1 sm:space-y-2 text-sm sm:text-base">
               <li>Read all questions carefully before answering.</li>
-              <li>Questions are organized by sections (e.g., Physics, Chemistry, Math).</li>
+              <li>Questions are organized by sections (e.g., Physics, Chemistry, Math, Biology).</li>
               <li>You can navigate between questions using the navigation panel, grouped by section.</li>
               <li>The exam will automatically be submitted when the time expires.</li>
               <li>Your answers are saved automatically every 30 seconds or when you navigate between questions.</li>
@@ -833,9 +836,13 @@ const StudentExamPortal = () => {
                   {currentQuestion.imageUrl && (
                     <div className="mt-3 sm:mt-4">
                       <img
-                        src={currentQuestion.imageUrl}
+                        src={`${BASE_URL}${currentQuestion.imageUrl}`}
                         alt="Question Image"
-                        className="w-full max-h-48 sm:max-h-56 object-contain"
+                        className="w-full max-h-48 sm:max-h-56 object-contain rounded border"
+                        onError={(e) => {
+                          e.target.src = '/fallback-image.jpg';
+                          console.error(`Failed to load image: ${BASE_URL}${currentQuestion.imageUrl}`);
+                        }}
                       />
                     </div>
                   )}
@@ -868,9 +875,13 @@ const StudentExamPortal = () => {
                           <div>{renderMathOrText(option.optionText)}</div>
                           {option.imageUrl && (
                             <img
-                              src={option.imageUrl}
+                              src={`${BASE_URL}${option.imageUrl}`}
                               alt={`Option ${index + 1}`}
-                              className="w-full max-h-16 sm:max-h-20 object-contain mt-1"
+                              className="w-full max-h-16 sm:max-h-20 object-contain mt-1 rounded border"
+                              onError={(e) => {
+                                e.target.src = '/fallback-image.jpg';
+                                console.error(`Failed to load image: ${BASE_URL}${option.imageUrl}`);
+                              }}
                             />
                           )}
                         </div>
@@ -936,7 +947,7 @@ const StudentExamPortal = () => {
             )}
 
             <button
-              onClick={() => navigate('/employee-dashboard/MyExams')}
+              onClick={() => navigate('/employee-dashboard/MyResult')}
               className="px-4 sm:px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm sm:text-base"
             >
               Return to Exams
