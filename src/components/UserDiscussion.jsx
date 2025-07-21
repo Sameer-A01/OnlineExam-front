@@ -40,7 +40,7 @@ import toast, { Toaster } from 'react-hot-toast';
 // Attachment Popup Component
 const AttachmentPopup = ({ file, onClose }) => {
   const filename = file.url.split('/').pop();
-  const correctUrl = `${import.meta.env.VITE_API_URL}/${filename}`;
+  const correctUrl = `${import.meta.env.VITE_API_URL}/uploads/${filename}`;
   const isImage = /\.(jpg|jpeg|png|gif)$/i.test(filename);
   const isPDF = /\.pdf$/i.test(filename);
 
