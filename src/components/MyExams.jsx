@@ -9,6 +9,27 @@ import 'katex/dist/katex.min.css';
 // Backend base URL (adjust if your backend runs on a different port or domain)
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+// Modal Component
+const Modal = ({ isOpen, onClose, message, onConfirm }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
+        <h2 className="text-lg font-semibold mb-4">{message}</h2>
+        <div className="flex justify-end">
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StudentExamPortal = () => {
   const [upcomingExams, setUpcomingExams] = useState([]);
   const [attemptStatus, setAttemptStatus] = useState({});
@@ -26,7 +47,10 @@ const StudentExamPortal = () => {
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
   const [questionTimeMap, setQuestionTimeMap] = useState({});
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
-  const [isNavigatorOpen, setIsNavigatorOpen] = useState(false); // For mobile navigator toggle
+  const [isNavigatorOpen, setIsNavigatorOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
   const sections = ['Physics', 'Chemistry', 'Math', 'Biology'];
 
   const { user } = useAuth();
@@ -63,7 +87,8 @@ const StudentExamPortal = () => {
       setAttemptStatus(statusMap);
     } catch (error) {
       console.error('Error fetching exams:', error);
-      alert('Failed to load exams');
+      setModalMessage('Failed to load exams');
+      setIsModalOpen(true);
     }
     setLoading(false);
   };
@@ -75,14 +100,16 @@ const StudentExamPortal = () => {
 
       const status = getExamStatus(exam);
       if (status === 'ended') {
-        alert('This exam has already ended');
+        setModalMessage('This exam has already ended');
+        setIsModalOpen(true);
         setView('examsList');
         return;
       }
 
       const attemptResponse = await axiosInstance.get(`/studentAnswers/check/${id}`);
       if (attemptResponse.data.hasAttempted) {
-        alert('You have already submitted this exam');
+        setModalMessage('You have already submitted this exam');
+        setIsModalOpen(true);
         setView('examsList');
         return;
       }
@@ -90,7 +117,12 @@ const StudentExamPortal = () => {
       setCurrentExam(exam);
 
       const questionsResponse = await axiosInstance.get(`/questions/exam/${id}?random=true`);
-      setQuestions(questionsResponse.data.questions || []);
+      const fetchedQuestions = questionsResponse.data.questions || [];
+      setQuestions(fetchedQuestions);
+
+      if (fetchedQuestions.length > 0 && currentQuestionIndex >= fetchedQuestions.length) {
+        setCurrentQuestionIndex(0);
+      }
 
       const endTime = new Date(exam.endTime);
       const currentTime = new Date();
@@ -100,7 +132,8 @@ const StudentExamPortal = () => {
       setView('examInstructions');
     } catch (error) {
       console.error('Error fetching exam details:', error);
-      alert('Failed to load exam details');
+      setModalMessage('Failed to load exam details');
+      setIsModalOpen(true);
       setView('examsList');
     }
   };
@@ -126,7 +159,8 @@ const StudentExamPortal = () => {
       setView('examInterface');
     } catch (error) {
       console.error('Error starting exam:', error);
-      alert('Failed to start exam');
+      setModalMessage('Failed to start exam');
+      setIsModalOpen(true);
     }
   };
 
@@ -165,7 +199,7 @@ const StudentExamPortal = () => {
       !document.msFullscreenElement
     ) {
       setIsFullScreen(false);
-      if (view === 'examInterface' && !examEnded) {
+      if (view === 'examInterface' && !examEnded && !isAutoSubmitting) {
         logCheatingAttempt('fullscreen_exit', 'User exited fullscreen mode');
       }
     } else {
@@ -201,7 +235,8 @@ const StudentExamPortal = () => {
     if (view === 'examInterface' && !examEnded) {
       event.preventDefault();
       logCheatingAttempt('copy_paste_attempt', `User attempted to ${action}`);
-      alert(`Warning: ${action} is disabled during the exam.`);
+      setModalMessage(`Warning: ${action} is disabled during the exam.`);
+      setIsModalOpen(true);
     }
   };
 
@@ -220,7 +255,8 @@ const StudentExamPortal = () => {
       ) {
         event.preventDefault();
         logCheatingAttempt('other', 'User attempted to open developer tools');
-        alert('Warning: Opening developer tools is not allowed during the exam.');
+        setModalMessage('Warning: Opening developer tools is not allowed during the exam.');
+        setIsModalOpen(true);
       }
       if (
         (event.altKey && (event.key === 'Tab' || event.key.includes('Arrow'))) ||
@@ -228,14 +264,18 @@ const StudentExamPortal = () => {
       ) {
         event.preventDefault();
         logCheatingAttempt('other', 'User attempted task switching');
-        alert('Warning: Task switching is not allowed during the exam.');
+        setModalMessage('Warning: Task switching is not allowed during the exam.');
+        setIsModalOpen(true);
       }
     }
   };
 
   const handleOptionSelect = (optionIndex) => {
     const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) return;
+    if (!currentQuestion) {
+      console.error('No current question found for option selection');
+      return;
+    }
 
     const questionId = currentQuestion._id;
     const currentSelectedOptions = answers[questionId]?.selectedOptions || [];
@@ -251,7 +291,6 @@ const StudentExamPortal = () => {
     setAnswers({
       ...answers,
       [questionId]: {
-        ...answers[questionId],
         selectedOptions: newSelectedOptions,
         attemptStatus: newSelectedOptions.length > 0 ? 'attempted' : 'not_attempted',
       },
@@ -260,17 +299,27 @@ const StudentExamPortal = () => {
 
   const markForReview = () => {
     const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) return;
+    if (!currentQuestion) {
+      console.error('No current question found for marking for review', {
+        currentQuestionIndex,
+        questionsLength: questions.length,
+      });
+      return;
+    }
 
     const questionId = currentQuestion._id;
+    if (!questionId) {
+      console.error('Question ID is undefined', { currentQuestion });
+      return;
+    }
 
-    setAnswers({
-      ...answers,
+    setAnswers(prevAnswers => ({
+      ...prevAnswers,
       [questionId]: {
-        ...answers[questionId],
+        selectedOptions: prevAnswers[questionId]?.selectedOptions || [],
         attemptStatus: 'marked_for_review',
       },
-    });
+    }));
   };
 
   useEffect(() => {
@@ -298,7 +347,10 @@ const StudentExamPortal = () => {
 
   const saveAnswer = async () => {
     const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) return;
+    if (!currentQuestion) {
+      console.error('No current question found for saving answer');
+      return;
+    }
 
     const questionId = currentQuestion._id;
     const answerData = answers[questionId] || {
@@ -319,7 +371,8 @@ const StudentExamPortal = () => {
       setAttempt(response.data.attempt);
     } catch (error) {
       console.error('Error saving answer:', error);
-      alert('Failed to save answer');
+      setModalMessage('Failed to save answer');
+      setIsModalOpen(true);
     }
   };
 
@@ -327,7 +380,7 @@ const StudentExamPortal = () => {
     await saveAnswer();
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setIsNavigatorOpen(false); // Close navigator on mobile after navigation
+      setIsNavigatorOpen(false);
     }
   };
 
@@ -335,14 +388,18 @@ const StudentExamPortal = () => {
     await saveAnswer();
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
-      setIsNavigatorOpen(false); // Close navigator on mobile after navigation
+      setIsNavigatorOpen(false);
     }
   };
 
   const jumpToQuestion = async (index) => {
+    if (index < 0 || index >= questions.length) {
+      console.error('Invalid question index:', index);
+      return;
+    }
     await saveAnswer();
     setCurrentQuestionIndex(index);
-    setIsNavigatorOpen(false); // Close navigator on mobile after navigation
+    setIsNavigatorOpen(false);
   };
 
   const formatTime = (seconds) => {
@@ -351,18 +408,17 @@ const StudentExamPortal = () => {
     return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
   };
 
-  const submitExam = async () => {
+  const submitExam = async (isAutoSubmit = false) => {
     await saveAnswer();
 
-    if (
-      !window.confirm(
-        'Are you sure you want to submit this exam? You won\'t be able to change your answers after submission.'
-      )
-    ) {
+    if (!isAutoSubmit && !window.confirm(
+      'Are you sure you want to submit this exam? You won\'t be able to change your answers after submission.'
+    )) {
       return;
     }
 
     try {
+      setIsAutoSubmitting(isAutoSubmit);
       if (
         document.fullscreenElement ||
         document.webkitFullscreenElement ||
@@ -380,8 +436,21 @@ const StudentExamPortal = () => {
       setExamResult(response.data);
     } catch (error) {
       console.error('Error submitting exam:', error);
-      alert('Failed to submit exam');
+      let errorMessage = 'Failed to submit exam';
+      if (error.response) {
+        if (error.response.status === 403) {
+          errorMessage = error.response.data.message || 'Manual submission not allowed during exam hours.';
+        } else if (error.response.status === 400) {
+          errorMessage = error.response.data.message || 'Exam already submitted';
+        } else if (error.response.status === 404) {
+          errorMessage = error.response.data.message || 'Attempt not found';
+        }
+      }
+      setModalMessage(errorMessage);
+      setIsModalOpen(true);
       setExamEnded(false);
+    } finally {
+      setIsAutoSubmitting(false);
     }
   };
 
@@ -423,8 +492,9 @@ const StudentExamPortal = () => {
         if (prevTime <= 1) {
           clearInterval(timer);
           if (!examEnded && view === 'examInterface') {
-            alert('Time\'s up! Your exam will be submitted automatically.');
-            submitExam();
+            setModalMessage('Time\'s up! Your exam will be submitted automatically.');
+            setIsModalOpen(true);
+            submitExam(true); // Pass true for auto-submission
           }
           return 0;
         }
@@ -478,6 +548,13 @@ const StudentExamPortal = () => {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const isManualSubmissionAllowed = () => {
+    if (!currentExam) return false;
+    const now = new Date();
+    const endTime = new Date(currentExam.endTime);
+    return now >= endTime;
   };
 
   const renderExamInstructions = () => {
@@ -537,6 +614,7 @@ const StudentExamPortal = () => {
               <li>You can mark questions for review to come back to them later.</li>
               <li>Some questions and options may include LaTeX-formatted math (e.g., $x^2$).</li>
               <li>Options may include images alongside text.</li>
+              <li>Manual submission is not allowed during exam hours; the exam will be submitted automatically when the time ends.</li>
             </ul>
           </div>
 
@@ -654,13 +732,69 @@ const StudentExamPortal = () => {
       background-color: #f8d7da;
       color: #721c24;
     }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 0.5rem;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .modal-content h2 {
+      margin-bottom: 1rem;
+    }
+
+    .modal-content button {
+      padding: 0.5rem 1rem;
+    }
   `;
 
   const renderExamInterface = () => {
-    if (!currentExam || !questions || questions.length === 0) return null;
+    if (!currentExam || !questions || questions.length === 0) {
+      console.error('Invalid exam state', { currentExam, questions });
+      return (
+        <div className="container mx-auto px-4 py-4 sm:px-6 max-w-6xl text-center">
+          <p className="text-red-600">Error: No questions available. Please try again.</p>
+          <button
+            onClick={() => setView('examsList')}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Back to Exams
+          </button>
+        </div>
+      );
+    }
 
     const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) return null;
+    if (!currentQuestion) {
+      console.error('No current question found', { currentQuestionIndex, questionsLength: questions.length });
+      return (
+        <div className="container mx-auto px-4 py-4 sm:px-6 max-w-6xl text-center">
+          <p className="text-red-600">Error: Invalid question. Please try again.</p>
+          <button
+            onClick={() => setView('examsList')}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Back to Exams
+          </button>
+        </div>
+      );
+    }
 
     const questionId = currentQuestion._id;
     const questionAnswers = answers[questionId] || { selectedOptions: [], attemptStatus: 'not_attempted' };
@@ -688,6 +822,8 @@ const StudentExamPortal = () => {
         </div>
       ) : null;
 
+    const isSubmitDisabled = !isManualSubmissionAllowed();
+
     return (
       <div className="container mx-auto px-4 py-4 sm:px-6 max-w-6xl">
         {fullscreenWarning}
@@ -708,8 +844,14 @@ const StudentExamPortal = () => {
                   <span className="font-bold text-lg sm:text-xl">{formatTime(timeLeft)}</span>
                 </div>
                 <button
-                  onClick={submitExam}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm sm:text-base"
+                  onClick={() => submitExam(false)}
+                  disabled={isSubmitDisabled}
+                  className={`px-4 py-2 rounded text-sm sm:text-base ${
+                    isSubmitDisabled
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-green-600 text-white hover:bg-green-700'
+                  }`}
+                  title={isSubmitDisabled ? 'Manual submission not allowed until exam time ends' : 'Submit Exam'}
                 >
                   Submit Exam
                 </button>
@@ -936,7 +1078,7 @@ const StudentExamPortal = () => {
           </>
         ) : (
           <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md text-center">
-            <CheckCircle size={48} sm={64} className="mx-auto text-green-600 mb-4" />
+            <CheckCircle size={48} className="mx-auto text-green-600 mb-4" />
             <h1 className="text-xl sm:text-2xl font-bold mb-2">Exam Submitted Successfully!</h1>
             <p className="text-base sm:text-lg mb-4 sm:mb-6">Thank you for completing the exam.</p>
 
@@ -965,6 +1107,12 @@ const StudentExamPortal = () => {
         {view === 'examsList' && renderExamsList()}
         {view === 'examInstructions' && renderExamInstructions()}
         {view === 'examInterface' && renderExamInterface()}
+        <Modal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          message={modalMessage}
+          onConfirm={() => setIsModalOpen(false)}
+        />
       </div>
     </>
   );

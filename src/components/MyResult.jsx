@@ -13,9 +13,26 @@ import {
   ArrowLeft, Eye, FileText, Zap, Shield, Lightbulb, Timer,
   ChevronRight, Medal, Gauge
 } from 'lucide-react';
+import { InlineMath, BlockMath } from 'react-katex';
+import 'katex/dist/katex.min.css';
 
-// At the top of MyResult.js
+// Backend base URL
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+// Function to render LaTeX or plain text
+const renderMathOrText = (text) => {
+  if (!text) return null;
+  const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('$$') && part.endsWith('$$')) {
+      return <BlockMath key={index} math={part.slice(2, -2)} />;
+    } else if (part.startsWith('$') && part.endsWith('$')) {
+      return <InlineMath key={index} math={part.slice(1, -1)} />;
+    } else {
+      return <span key={index}>{part}</span>;
+    }
+  });
+};
 
 const MyResult = () => {
   const [exams, setExams] = useState([]);
@@ -733,100 +750,96 @@ const MyResult = () => {
                         question.correctAnswers?.sort().join(',');
 
                       return (
-                       // Inside the selectedAttempt.answers.map loop
-<div key={answer._id || index} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-  <div className="flex items-start justify-between mb-4">
-    <h4 className="font-semibold text-gray-800 flex items-center">
-      <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-sm mr-3">
-        Q{index + 1}
-      </span>
-      {question.questionText}
-    </h4>
-    <div className="flex items-center space-x-2">
-      {isCorrect ? (
-        <div className="flex items-center text-green-600">
-          <CheckCircle className="w-5 h-5 mr-1" />
-          <span className="text-sm font-medium">Correct</span>
-        </div>
-      ) : (
-        <div className="flex items-center text-red-600">
-          <XCircle className="w-5 h-5 mr-1" />
-          <span className="text-sm font-medium">Incorrect</span>
-        </div>
-      )}
-    </div>
-  </div>
+                        <div key={answer._id || index} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                          <div className="flex items-start justify-between mb-4">
+                            <h4 className="font-semibold text-gray-800 flex items-center">
+                              <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-sm mr-3">
+                                Q{index + 1}
+                              </span>
+                              {renderMathOrText(question.questionText)}
+                            </h4>
+                            <div className="flex items-center space-x-2">
+                              {isCorrect ? (
+                                <div className="flex items-center text-green-600">
+                                  <CheckCircle className="w-5 h-5 mr-1" />
+                                  <span className="text-sm font-medium">Correct</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center text-red-600">
+                                  <XCircle className="w-5 h-5 mr-1" />
+                                  <span className="text-sm font-medium">Incorrect</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
 
-  {question.imageUrl && question.imageUrl !== '' ? (
-    <div className="mb-4">
-      <img
-        src={`${BASE_URL}${question.imageUrl}`}
-        alt="Question image"
-        className="max-w-full h-auto rounded-lg border border-gray-200"
-        onError={(e) => {
-          console.error(`Failed to load question image: ${BASE_URL}${question.imageUrl}`);
-          console.error(`Question ID: ${question._id}, Exam ID: ${selectedAttempt.examId._id}`);
-          e.target.src = '/placeholder-image.jpg';
-        }}
-        onLoad={() => console.log(`Successfully loaded question image: ${BASE_URL}${question.imageUrl}`)}
-      />
-    </div>
-  ) : (
-    <p className="text-gray-500 text-sm">No question image available</p>
-  )}
+                          {question.imageUrl && question.imageUrl !== '' && (
+                            <div className="mb-4">
+                              <img
+                                src={`${BASE_URL}${question.imageUrl}`}
+                                alt="Question image"
+                                className="max-w-full h-auto rounded-lg border border-gray-200"
+                                onError={(e) => {
+                                  console.error(`Failed to load question image: ${BASE_URL}${question.imageUrl}`);
+                                  console.error(`Question ID: ${question._id}, Exam ID: ${selectedAttempt.examId._id}`);
+                                  e.target.src = '/placeholder-image.jpg';
+                                }}
+                                onLoad={() => console.log(`Successfully loaded question image: ${BASE_URL}${question.imageUrl}`)}
+                              />
+                            </div>
+                          )}
 
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-    <div className="bg-gray-50 rounded-lg p-4">
-      <p className="text-sm font-medium text-gray-700 mb-2">Your Answer</p>
-      <p className="text-gray-800">
-        {answer.selectedOptions?.length > 0
-          ? answer.selectedOptions
-              .map((opt) => question.options[opt]?.optionText || `Option ${opt}`)
-              .join(', ')
-          : 'Not answered'}
-      </p>
-      {answer.selectedOptions?.map((opt, i) => (
-        question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
-          <img
-            key={i}
-            src={`${BASE_URL}${question.options[opt].imageUrl}`}
-            alt={`Option ${opt} image`}
- shadows
-            className="mt-2 max-w-xs h-auto rounded border border-gray-200"
-            onError={(e) => {
-              console.error(`Failed to load option image: ${BASE_URL}${question.options[opt].imageUrl}`);
-              e.target.src = '/placeholder-image.jpg';
-            }}
-            onLoad={() => console.log(`Successfully loaded option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
-          />
-        ) : null
-      ))}
-    </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Your Answer</p>
+                              <p className="text-gray-800">
+                                {answer.selectedOptions?.length > 0
+                                  ? answer.selectedOptions
+                                      .map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
+                                      .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])
+                                  : 'Not answered'}
+                              </p>
+                              {answer.selectedOptions?.map((opt, i) => (
+                                question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
+                                  <img
+                                    key={i}
+                                    src={`${BASE_URL}${question.options[opt].imageUrl}`}
+                                    alt={`Option ${opt} image`}
+                                    className="mt-2 max-w-xs h-auto rounded border border-gray-200"
+                                    onError={(e) => {
+                                      console.error(`Failed to load option image: ${BASE_URL}${question.options[opt].imageUrl}`);
+                                      e.target.src = '/placeholder-image.jpg';
+                                    }}
+                                    onLoad={() => console.log(`Successfully loaded option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
+                                  />
+                                ) : null
+                              ))}
+                            </div>
 
-    <div className="bg-green-50 rounded-lg p-4">
-      <p className="text-sm font-medium text-gray-700 mb-2">Correct Answer</p>
-      <p className="text-green-800">
-        {question.correctAnswers
-          ?.map((opt) => question.options[opt]?.optionText || `Option ${opt}`)
-          ?.join(', ')}
-      </p>
-      {question.correctAnswers?.map((opt, i) => (
-        question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
-          <img
-            key={i}
-            src={`${BASE_URL}${question.options[opt].imageUrl}`}
-            alt={`Correct option ${opt} image`}
-            className="mt-2 max-w-xs h-auto rounded border border-gray-200"
-            onError={(e) => {
-              console.error(`Failed to load correct option image: ${BASE_URL}${question.options[opt].imageUrl}`);
-              e.target.src = '/placeholder-image.jpg';
-            }}
-            onLoad={() => console.log(`Successfully loaded correct option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
-          />
-        ) : null
-      ))}
-    </div>
-  </div>
+                            <div className="bg-green-50 rounded-lg p-4">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Correct Answer</p>
+                              <p className="text-green-800">
+                                {question.correctAnswers
+                                  ?.map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
+                                  .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])}
+                              </p>
+                              {question.correctAnswers?.map((opt, i) => (
+                                question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
+                                  <img
+                                    key={i}
+                                    src={`${BASE_URL}${question.options[opt].imageUrl}`}
+                                    alt={`Correct option ${opt} image`}
+                                    className="mt-2 max-w-xs h-auto rounded border border-gray-200"
+                                    onError={(e) => {
+                                      console.error(`Failed to load correct option image: ${BASE_URL}${question.options[opt].imageUrl}`);
+                                      e.target.src = '/placeholder-image.jpg';
+                                    }}
+                                    onLoad={() => console.log(`Successfully loaded correct option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
+                                  />
+                                ) : null
+                              ))}
+                            </div>
+                          </div>
 
                           <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-4">
                             <div className="flex items-center">
@@ -843,13 +856,28 @@ const MyResult = () => {
                             </div>
                           </div>
 
-                          {explanation?.explanation && (
+                          {(explanation?.explanation || explanation?.explanationImageUrl) && (
                             <div className="bg-blue-50 border-l-4 border-blue-400 rounded-lg p-4">
                               <div className="flex items-start">
                                 <Lightbulb className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
                                 <div>
                                   <p className="font-medium text-blue-800 mb-1">Explanation</p>
-                                  <p className="text-blue-700">{explanation.explanation}</p>
+                                  {explanation.explanation && (
+                                    <p className="text-blue-700">{renderMathOrText(explanation.explanation)}</p>
+                                  )}
+                                  {explanation.explanationImageUrl && explanation.explanationImageUrl !== '' && (
+                                    <img
+                                      src={`${BASE_URL}${explanation.explanationImageUrl}`}
+                                      alt="Explanation image"
+                                      className="mt-2 max-w-xs h-auto rounded border border-gray-200"
+                                      onError={(e) => {
+                                        console.error(`Failed to load explanation image: ${BASE_URL}${explanation.explanationImageUrl}`);
+                                        console.error(`Question ID: ${question._id}, Exam ID: ${selectedAttempt.examId._id}`);
+                                        e.target.src = '/placeholder-image.jpg';
+                                      }}
+                                      onLoad={() => console.log(`Successfully loaded explanation image: ${BASE_URL}${explanation.explanationImageUrl}`)}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             </div>

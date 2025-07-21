@@ -8,7 +8,6 @@ import 'katex/dist/katex.min.css';
 // Backend base URL (adjust if your backend runs on a different port or domain)
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-
 const ExamAdmin = () => {
   const navigate = useNavigate();
   // States
@@ -48,6 +47,8 @@ const ExamAdmin = () => {
     difficulty: 'none',
     tags: [],
     explanation: '',
+    explanationImage: null,
+    explanationImageUrl: ''
   });
   const [tagInput, setTagInput] = useState('');
   const sections = ['Physics', 'Chemistry', 'Math', 'Biology'];
@@ -280,6 +281,26 @@ const ExamAdmin = () => {
     }));
   };
 
+  // Handle explanation image selection
+  const handleExplanationImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setQuestionForm((prev) => ({
+        ...prev,
+        explanationImage: file,
+      }));
+    }
+  };
+
+  // Clear explanation image
+  const clearExplanationImage = () => {
+    setQuestionForm((prev) => ({
+      ...prev,
+      explanationImage: null,
+      explanationImageUrl: '',
+    }));
+  };
+
   // Handle option changes
   const handleOptionChange = (index, field, value) => {
     const updatedOptions = [...questionForm.options];
@@ -381,6 +402,8 @@ const ExamAdmin = () => {
       difficulty: question.difficulty || 'none',
       tags: question.tags || [],
       explanation: question.explanation || '',
+      explanationImage: null,
+      explanationImageUrl: question.explanationImageUrl || ''
     });
     setTagInput('');
   };
@@ -421,17 +444,26 @@ const ExamAdmin = () => {
       if (questionForm.questionImage) {
         formData.append('questionImage', questionForm.questionImage);
       }
+      if (questionForm.explanationImage) {
+        formData.append('explanationImage', questionForm.explanationImage);
+      }
+      if (editingQuestion && questionForm.explanationImageUrl) {
+        formData.append('explanationImageUrl', questionForm.explanationImageUrl);
+      }
+      if (editingQuestion && questionForm.imageUrl) {
+        formData.append('imageUrl', questionForm.imageUrl);
+      }
 
-      questionForm.options.forEach((option) => {
+      questionForm.options.forEach((option, index) => {
         if (option.optionImage) {
-          formData.append('optionImages', option.optionImage);
+          formData.append(`optionImages[${index}]`, option.optionImage);
+        }
+        if (editingQuestion && option.imageUrl) {
+          formData.append(`options[${index}][imageUrl]`, option.imageUrl);
         }
       });
 
       if (editingQuestion) {
-        if (!questionForm.questionImage && questionForm.imageUrl) {
-          formData.append('imageUrl', questionForm.imageUrl);
-        }
         await axiosInstance.put(`/questions/${editingQuestion._id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -479,6 +511,8 @@ const ExamAdmin = () => {
       difficulty: 'none',
       tags: [],
       explanation: '',
+      explanationImage: null,
+      explanationImageUrl: ''
     });
     setTagInput('');
   };
@@ -729,7 +763,7 @@ const ExamAdmin = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{new Date(exam.startTime).toLocaleTimeString()}</div>
                   </td>
-                  <td className="px-6愿望 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{exam.duration} min</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -783,7 +817,6 @@ const ExamAdmin = () => {
   // Render question management
   const renderQuestionManagement = () => (
     <div className="min-h-screen bg-gray-50">
-      {/* Header Section */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-4">
@@ -807,7 +840,6 @@ const ExamAdmin = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Question Form Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
           <div className="px-6 py-5 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">
@@ -820,9 +852,7 @@ const ExamAdmin = () => {
           
           <div className="px-6 py-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column */}
               <div className="space-y-6">
-                {/* Section Selection */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Section <span className="text-red-500">*</span>
@@ -843,7 +873,6 @@ const ExamAdmin = () => {
                   </select>
                 </div>
 
-                {/* Marks and Negative Marks */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -875,7 +904,6 @@ const ExamAdmin = () => {
                   </div>
                 </div>
 
-                {/* Difficulty */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Difficulty Level
@@ -893,7 +921,6 @@ const ExamAdmin = () => {
                   </select>
                 </div>
 
-                {/* Tags */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Tags
@@ -939,9 +966,7 @@ const ExamAdmin = () => {
                 </div>
               </div>
 
-              {/* Right Column */}
               <div className="space-y-6">
-                {/* Question Text */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Question Text <span className="text-red-500">*</span>
@@ -963,7 +988,6 @@ const ExamAdmin = () => {
                   )}
                 </div>
 
-                {/* Question Image */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Question Image (Optional)
@@ -980,7 +1004,7 @@ const ExamAdmin = () => {
                         src={questionForm.questionImage ? URL.createObjectURL(questionForm.questionImage) : `${BASE_URL}${questionForm.imageUrl}`}
                         alt="Question preview"
                         className="max-h-24 object-contain rounded border"
-                        onError={(e) => { e.target.src = '/fallback-image.jpg'; }} // Fallback for broken images
+                        onError={(e) => { e.target.src = '/fallback-image.jpg'; }}
                       />
                       <button
                         type="button"
@@ -993,7 +1017,6 @@ const ExamAdmin = () => {
                   )}
                 </div>
 
-                {/* Explanation */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Explanation
@@ -1012,11 +1035,36 @@ const ExamAdmin = () => {
                       <div className="text-sm">{renderMathOrText(questionForm.explanation)}</div>
                     </div>
                   )}
+                  <label className="block text-sm font-semibold text-gray-700 mt-4 mb-2">
+                    Explanation Image (Optional)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png"
+                    onChange={handleExplanationImageChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  />
+                  {(questionForm.explanationImage || questionForm.explanationImageUrl) && (
+                    <div className="mt-2 flex items-center">
+                      <img
+                        src={questionForm.explanationImage ? URL.createObjectURL(questionForm.explanationImage) : `${BASE_URL}${questionForm.explanationImageUrl}`}
+                        alt="Explanation preview"
+                        className="max-h-24 object-contain rounded border"
+                        onError={(e) => { e.target.src = '/fallback-image.jpg'; }}
+                      />
+                      <button
+                        type="button"
+                        onClick={clearExplanationImage}
+                        className="ml-3 text-red-500 hover:text-red-700 transition-colors duration-200"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Options Section */}
             <div className="mt-8">
               <div className="flex justify-between items-center mb-4">
                 <label className="block text-sm font-semibold text-gray-700">
@@ -1088,7 +1136,7 @@ const ExamAdmin = () => {
                               src={option.optionImage ? URL.createObjectURL(option.optionImage) : `${BASE_URL}${option.imageUrl}`}
                               alt={`Option ${String.fromCharCode(65 + index)}`}
                               className="max-h-24 object-contain rounded border"
-                              onError={(e) => { e.target.src = '/fallback-image.jpg'; }} // Fallback for broken images
+                              onError={(e) => { e.target.src = '/fallback-image.jpg'; }}
                             />
                             <button
                               type="button"
@@ -1109,7 +1157,6 @@ const ExamAdmin = () => {
               </p>
             </div>
 
-            {/* Action Buttons */}
             <div className="mt-8 flex justify-end space-x-3">
               {editingQuestion && (
                 <button
@@ -1134,7 +1181,6 @@ const ExamAdmin = () => {
           </div>
         </div>
 
-        {/* Questions List */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="px-6 py-5 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">Questions</h2>
@@ -1171,7 +1217,6 @@ const ExamAdmin = () => {
                     <div className="divide-y divide-gray-200">
                       {sectionQuestions.map((question, index) => (
                         <div key={question._id} className="px-6 py-6">
-                          {/* Question Header */}
                           <div className="flex justify-between items-start mb-4">
                             <div className="flex-1">
                               <div className="flex items-center space-x-3 mb-2">
@@ -1216,7 +1261,6 @@ const ExamAdmin = () => {
                             </div>
                           </div>
 
-                          {/* Question Content */}
                           <div className="space-y-4">
                             <div className="text-gray-900">
                               {renderMathOrText(question.questionText)}
@@ -1233,7 +1277,6 @@ const ExamAdmin = () => {
                               </div>
                             )}
 
-                            {/* Options */}
                             <div className="space-y-2">
                               {question.options.map((option, optIndex) => (
                                 <div
@@ -1271,7 +1314,6 @@ const ExamAdmin = () => {
                               ))}
                             </div>
 
-                            {/* Tags */}
                             {question.tags && question.tags.length > 0 && (
                               <div className="flex flex-wrap gap-2">
                                 <span className="text-sm font-medium text-gray-700">Tags:</span>
@@ -1286,13 +1328,22 @@ const ExamAdmin = () => {
                               </div>
                             )}
 
-                            {/* Explanation */}
                             {question.explanation && (
                               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                                 <p className="text-sm font-semibold text-blue-900 mb-2">Explanation:</p>
                                 <div className="text-sm text-blue-800">
                                   {renderMathOrText(question.explanation)}
                                 </div>
+                                {question.explanationImageUrl && (
+                                  <div className="mt-2">
+                                    <img
+                                      src={`${BASE_URL}${question.explanationImageUrl}`}
+                                      alt="Explanation"
+                                      className="max-h-48 object-contain rounded border"
+                                      onError={(e) => { e.target.src = '/fallback-image.jpg'; console.error(`Failed to load image: ${BASE_URL}${question.explanationImageUrl}`); }}
+                                    />
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1309,7 +1360,6 @@ const ExamAdmin = () => {
     </div>
   );
 
-  // Main render
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {view === 'exams' && renderExamsList()}
