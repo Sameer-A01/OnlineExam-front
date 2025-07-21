@@ -524,7 +524,7 @@ const Notice = () => {
                   Attachments ({selectedAttachments.length})
                 </h3>
                 <button
-                  onClick={() => setShowAttackModal(false)}
+                  onClick={() => setShowAttachmentModal(false)}
                   className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl transition-all duration-200"
                 >
                   <X size={24} />
