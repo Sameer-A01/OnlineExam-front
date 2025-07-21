@@ -55,7 +55,10 @@ const Profile = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setUserData(prev => ({ ...prev, [name]: value }));
+    // Only allow changes to password and address fields
+    if (name === 'password' || name === 'address') {
+      setUserData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -63,7 +66,10 @@ const Profile = () => {
     setLoading(true);
     setError(null);
     
-    const updateData = { ...userData };
+    const updateData = { 
+      password: userData.password,
+      address: userData.address
+    };
     if (updateData.password === '' || updateData.password === originalPassword) {
       delete updateData.password;
     }
@@ -76,15 +82,11 @@ const Profile = () => {
       });
       
       if (response.data.success) {
-        setUserData({ 
-          name: response.data.user.name,
-          email: response.data.user.email,
+        setUserData(prev => ({ 
+          ...prev,
           address: response.data.user.address,
-          role: response.data.user.role,
-          batch: response.data.user.batch,
-          profilePic: response.data.user.profilePic || '',
           password: ''
-        });
+        }));
         setOriginalPassword(response.data.user.password);
         setIsEditing(false);
         setSaveSuccess(true);
@@ -232,8 +234,8 @@ const Profile = () => {
                         name="name"
                         value={userData.name}
                         onChange={handleInputChange}
-                        disabled={!isEditing}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 transition-all duration-200"
+                        disabled
+                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
                         placeholder="Enter your full name"
                       />
                     </div>
@@ -250,8 +252,8 @@ const Profile = () => {
                         name="email"
                         value={userData.email}
                         onChange={handleInputChange}
-                        disabled={!isEditing}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 transition-all duration-200"
+                        disabled
+                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
                         placeholder="Enter your email"
                       />
                     </div>
@@ -343,7 +345,7 @@ const Profile = () => {
 
                 <div className="p-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4 the">
+                    <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
                           Batch Name
@@ -460,11 +462,6 @@ const Profile = () => {
             )}
           </div>
         </div>
-
-        {/* Footer */}
-        {/* <footer className="mt-12 py-6 text-center text-gray-600">
-          <p>Designed and Developed by <a href="https://webaziz.in" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 transition-colors duration-200">webaziz.in</a></p>
-        </footer> */}
       </div>
     </div>
   );
