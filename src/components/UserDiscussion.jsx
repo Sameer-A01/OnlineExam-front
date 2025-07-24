@@ -186,11 +186,15 @@ const UserDiscussion = () => {
 
   // Initialize socket connection
   useEffect(() => {
-    const newSocket = io(import.meta.env.VITE_API_URL, {
-      auth: { token: localStorage.getItem('ims_token') },
-      withCredentials: true,
-      transports: ['websocket', 'polling'],
-    });
+   const newSocket = io(import.meta.env.VITE_SOCKET_URL, {
+  transports: ['websocket'], // iOS fix
+  secure: true,
+  withCredentials: true,
+  auth: {
+    token: localStorage.getItem('ims_token'),
+  },
+});
+
     setSocket(newSocket);
     newSocket.on('connect', () => console.log('Socket.IO connected:', newSocket.id));
     newSocket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
