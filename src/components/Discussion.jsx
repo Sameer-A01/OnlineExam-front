@@ -33,7 +33,15 @@ import {
   Download,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import toast, { Toaster } from 'react-hot-toast'; // Import react-hot-toast
+import toast, { Toaster } from 'react-hot-toast';
+
+// Utility to convert VAPID key
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+};
 
 // Attachment Popup Component
 const AttachmentPopup = ({ file, onClose }) => {
@@ -181,30 +189,154 @@ const AdminDiscussion = () => {
     }
   };
 
-  // Initialize socket connection
+  // Initialize Socket.IO connection
   useEffect(() => {
-   const newSocket = io(import.meta.env.VITE_SOCKET_URL, {
-  transports: ['websocket'], // iOS fix
-  secure: true,
-  withCredentials: true,
-  auth: {
-    token: localStorage.getItem('ims_token'),
-  },
-});
-
+    const newSocket = io(import.meta.env.VITE_API_URL, {
+      auth: { token: localStorage.getItem('ims_token') },
+      withCredentials: true,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
     setSocket(newSocket);
-    newSocket.on('connect', () => console.log('Socket.IO connected:', newSocket.id));
-    newSocket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
+    newSocket.on('connect', () => {
+      console.log('Socket.IO connected:', newSocket.id);
+      if (user?.userId) {
+        newSocket.emit('joinDiscussion', user.userId); // Join user-specific room
+        toast.success('Connected to discussion portal!', {
+          duration: 3000,
+          position: 'top-right',
+        });
+      }
+    });
+    newSocket.on('reconnect', () => {
+      console.log('Socket.IO reconnected:', newSocket.id);
+      if (user?.userId) {
+        newSocket.emit('joinDiscussion', user.userId); // Rejoin room on reconnect
+        toast.success('Reconnected to discussion portal!', {
+          duration: 3000,
+          position: 'top-right',
+        });
+      }
+    });
+    newSocket.on('connect_error', (err) => {
+      console.error('Socket.IO connection error:', err.message);
+      toast.error('Failed to connect to discussion portal.', {
+        duration: 4000,
+        position: 'top-right',
+      });
+    });
+    newSocket.on('reconnect_error', (err) => {
+      console.error('Socket.IO reconnection error:', err.message);
+      toast.error('Failed to reconnect to discussion portal.', {
+        duration: 4000,
+        position: 'top-right',
+      });
+    });
     return () => newSocket.disconnect();
-  }, []);
+  }, [user?.userId]);
+
+  // Join doubt-specific room when selecting a doubt
+  useEffect(() => {
+    if (socket && selectedDoubt?._id) {
+      socket.emit('joinDoubt', selectedDoubt._id);
+    }
+  }, [socket, selectedDoubt]);
+
+  // Socket.IO event listeners
+  useEffect(() => {
+    if (!socket || !user?.userId) return;
+    socket.on('new_doubt', (doubt) => {
+      setDoubts((prev) => [doubt, ...prev]);
+      toast.success('New doubt posted!', {
+        duration: 3000,
+        position: 'top-right',
+        icon: '📝',
+      });
+      fetchDoubts(); // Refresh to ensure consistency
+    });
+    socket.on('new_comment', (comment) => {
+      if (comment.doubtId === selectedDoubt?._id) {
+        setComments((prev) => [...prev, comment]);
+        toast.success('New comment received!', {
+          duration: 3000,
+          position: 'top-right',
+          icon: '💬',
+        });
+      }
+    });
+    socket.on('like_doubt', (data) => {
+      setDoubts((prev) =>
+        prev.map((d) =>
+          d._id === data.doubtId ? { ...d, likes: data.likes } : d
+        )
+      );
+      if (data.doubtId === selectedDoubt?._id) {
+        fetchDoubts(); // Refresh to ensure consistency
+      }
+      toast.success('Doubt liked!', {
+        duration: 3000,
+        position: 'top-right',
+        icon: '❤️',
+      });
+    });
+    socket.on('like_comment', (data) => {
+      if (data.doubtId === selectedDoubt?._id) {
+        setComments((prev) =>
+          prev.map((c) =>
+            c._id === data.commentId ? { ...c, likes: data.likes } : c
+          )
+        );
+        toast.success('Comment liked!', {
+          duration: 3000,
+          position: 'top-right',
+          icon: '❤️',
+        });
+      }
+    });
+    socket.on('tagged', (notification) => {
+      setNotifications((prev) => [notification, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+      if (document.visibilityState !== 'visible' && notificationPermission === 'granted') {
+        new Notification('Tagged in Discussion', {
+          body: generateNotificationMessage(notification),
+          icon: '/Logo.jpg',
+          tag: notification._id || Date.now().toString(),
+        });
+      }
+    });
+    return () => {
+      socket.off('new_doubt');
+      socket.off('new_comment');
+      socket.off('like_doubt');
+      socket.off('like_comment');
+      socket.off('tagged');
+    };
+  }, [socket, user?.userId, selectedDoubt, notificationPermission]);
 
   // Request notification permission
   useEffect(() => {
     if ('Notification' in window && notificationPermission !== 'granted' && notificationPermission !== 'denied') {
       Notification.requestPermission().then((permission) => {
         setNotificationPermission(permission);
+        if (permission === 'granted') {
+          toast.success('Notifications enabled!', {
+            duration: 3000,
+            position: 'top-right',
+          });
+        } else if (permission === 'denied') {
+          toast.error('Notifications blocked. Enable them in browser settings.', {
+            duration: 4000,
+            position: 'top-right',
+          });
+        }
       }).catch((error) => {
         console.error('Error requesting notification permission:', error);
+        toast.error('Failed to request notification permission.', {
+          duration: 4000,
+          position: 'top-right',
+        });
       });
     }
   }, [notificationPermission]);
@@ -213,516 +345,165 @@ const AdminDiscussion = () => {
   const registerServiceWorkerAndSubscribe = async () => {
     if ('serviceWorker' in navigator && 'PushManager' in window && user?.userId) {
       try {
-        const registration = await navigator.serviceWorker.register('/sw.js');
+        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY),
         });
-
         await axiosInstance.post('/push/subscribe', {
           userId: user.userId,
           subscription,
         });
         console.log('Push subscription successful');
+        toast.success('Subscribed to notifications!', {
+          duration: 3000,
+          position: 'top-right',
+        });
       } catch (err) {
         console.error('Push subscription failed:', err);
+        toast.error('Failed to subscribe to notifications. Check if the app is added to the home screen on iOS.', {
+          duration: 4000,
+          position: 'top-right',
+        });
       }
     } else {
-      console.error('Service worker or userId not available for push subscription');
+      console.error('Service worker or PushManager not available');
+      toast.error('Notifications not supported or user not logged in.', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
-  const urlBase64ToUint8Array = (base64String) => {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = atob(base64);
-    return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
-  };
-
-  // Set up socket listeners and push notifications
   useEffect(() => {
-    if (!socket) return;
-
-    socket.on('notification', (notification) => {
-      setNotifications((prev) => [notification, ...prev]);
-      setUnreadCount((prev) => prev + 1);
-      if (document.visibilityState !== 'visible' && notificationPermission === 'granted') {
-        new Notification('New Notification', {
-          body: generateNotificationMessage(notification),
-          icon: '/notification-icon.png',
-          tag: notification._id || Date.now().toString(),
-        });
-      }
-      fetchDoubts(); // Refresh doubts to include new activity
-    });
-
-    // Register service worker and subscribe if user is authenticated
     if (user?.userId) {
       registerServiceWorkerAndSubscribe();
     }
+  }, [user?.userId]);
 
-    return () => socket.off('notification');
-  }, [socket, user, notificationPermission]);
-
-  // Fetch doubts
-  const fetchDoubts = useCallback(async (search = filters.search, hashtag = filters.hashtag) => {
+  // Fetch initial data
+  const fetchDoubts = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (search) params.append('doubt', search);
-      if (hashtag) params.append('hashtag', hashtag);
-      const { data } = await axiosInstance.get(`/discussions/doubts?${params}`);
-      setDoubts(data.doubts || []);
+      const params = new URLSearchParams(filters);
+      const [doubtsRes, myDoubtsRes, hashtagsRes, likedRes, bookmarksRes, notificationsRes] = await Promise.all([
+        axiosInstance.get(`/discussions/doubts?${params}`),
+        axiosInstance.get('/discussions/doubts/commented'),
+        axiosInstance.get('/discussions/hashtags/popular'),
+        axiosInstance.get('/discussions/doubts/most-liked'),
+        axiosInstance.get('/discussions/bookmarks'),
+        axiosInstance.get('/discussions/notifications'),
+      ]);
+      setDoubts(doubtsRes.data);
+      setMyDoubts(myDoubtsRes.data);
+      setPopularHashtags(hashtagsRes.data);
+      setMostLikedQuestions(likedRes.data);
+      setBookmarkedDoubts(bookmarksRes.data);
+      setNotifications(notificationsRes.data);
+      setUnreadCount(notificationsRes.data.filter((n) => !n.read).length);
     } catch (error) {
-      console.error('Failed to fetch doubts:', error);
-      toast.error('Failed to fetch doubts. Please try again.', {
+      console.error('Error fetching data:', error);
+      toast.error('Failed to load discussion data.', {
         duration: 4000,
         position: 'top-right',
       });
     } finally {
       setLoading(false);
     }
-  }, [filters]);
-
-  // Debounced fetchDoubts
-  const debouncedFetchDoubts = useCallback(debounce(fetchDoubts, 300), [fetchDoubts]);
-
-  // Fetch my doubts
-  const fetchMyDoubts = async () => {
-    try {
-      const { data: { doubts = [] } } = await axiosInstance.get('/discussions/doubts', {
-        params: { authorOnly: true },
-      });
-      setMyDoubts(doubts);
-    } catch (error) {
-      console.error('Failed to fetch my doubts:', error);
-      toast.error('Failed to fetch your doubts.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
   };
 
-  // Fetch notifications
-  const fetchNotifications = async () => {
-    try {
-      const { data } = await axiosInstance.get('/discussions/notifications');
-      setNotifications(data || []);
-      setUnreadCount(data.filter((n) => !n.isRead).length);
-    } catch (error) {
-      console.error('Failed to fetch notifications:', error);
-      toast.error('Failed to fetch notifications.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Fetch popular hashtags
-  const fetchPopularHashtags = async () => {
-    try {
-      const { data } = await axiosInstance.get('/discussions/hashtags/popular');
-      setPopularHashtags(data);
-    } catch (error) {
-      console.error('Failed to fetch popular hashtags:', error);
-      toast.error('Failed to fetch popular hashtags.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Fetch most liked questions
-  const fetchMostLikedQuestions = async () => {
-    try {
-      const { data } = await axiosInstance.get('/discussions/doubts/most-liked');
-      setMostLikedQuestions(data);
-    } catch (error) {
-      console.error('Failed to fetch most liked questions:', error);
-      toast.error('Failed to fetch most liked questions.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Fetch bookmarked doubts
-  const fetchBookmarkedDoubts = async () => {
-    try {
-      const { data } = await axiosInstance.get('/discussions/bookmarks');
-      setBookmarkedDoubts(data);
-    } catch (error) {
-      console.error('Failed to fetch bookmarked doubts:', error);
-      toast.error('Failed to fetch bookmarked doubts.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Fetch comments for a doubt
-  const fetchComments = async (doubtId) => {
-    try {
-      const { data: comments = [] } = await axiosInstance.get(`/discussions/doubts/${doubtId}/comments`);
-      setComments(comments);
-    } catch (error) {
-      console.error('Failed to fetch comments:', error);
-      toast.error('Failed to fetch comments.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-      setComments([]);
-    }
-  };
-
-  // Initial data fetch
   useEffect(() => {
     fetchDoubts();
-    fetchMyDoubts();
-    fetchNotifications();
-    fetchPopularHashtags();
-    fetchMostLikedQuestions();
-    fetchBookmarkedDoubts();
-  }, []);
+  }, [filters]);
 
-  // Handle filter changes
-  useEffect(() => {
-    debouncedFetchDoubts(filters.search, filters.hashtag);
-  }, [filters, debouncedFetchDoubts]);
-
-  // View doubt
-  const handleViewDoubt = async (doubt) => {
-    try {
-      const { data } = await axiosInstance.get(`/discussions/doubts/${doubt._id}`);
-      setDoubts((prev) =>
-        prev.map((d) => (d._id === doubt._id ? { ...d, views: data.views } : d))
-      );
-      setSelectedDoubt(data);
-      fetchComments(doubt._id);
-    } catch (error) {
-      console.error('Failed to view doubt:', error);
-      toast.error('Failed to view doubt.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Create doubt
-  const handleCreateDoubt = async () => {
-    if (!newDoubt.title.trim() || !newDoubt.content.trim()) {
-      toast.error('Please fill in all required fields.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-      return;
-    }
+  const handleCreateDoubt = async (e) => {
+    e.preventDefault();
     try {
       const formData = new FormData();
       formData.append('title', newDoubt.title);
       formData.append('content', newDoubt.content);
-      formData.append('hashtags', currentHashtags.join(','));
+      currentHashtags.forEach((tag) => formData.append('hashtags', tag));
       newDoubt.attachments.forEach((file) => formData.append('attachments', file));
-      await axiosInstance.post('/discussions/doubts', formData, {
+      const response = await axiosInstance.post('/discussions/doubts', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+      socket.emit('new_doubt', response.data);
       setNewDoubt({ title: '', content: '', attachments: [] });
       setCurrentHashtags([]);
       setShowCreateForm(false);
       fetchDoubts();
-      fetchMyDoubts();
       toast.success('Doubt posted successfully!', {
-        duration: 4000,
-        position: 'top-right',
-        icon: '🎉',
-      });
-    } catch (error) {
-      console.error('Failed to create doubt:', error);
-      toast.error(error.response?.data?.message || 'Error creating doubt. Please try again.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Delete doubt
-  const handleDeleteDoubt = async (doubtId) => {
-    if (!window.confirm('Are you sure you want to delete this doubt?')) return;
-    try {
-      const response = await axiosInstance.delete(`/discussions/doubts/${doubtId}`);
-      setDoubts(doubts.filter((d) => d._id !== doubtId));
-      setMyDoubts(myDoubts.filter((d) => d._id !== doubtId));
-      if (selectedDoubt?._id === doubtId) {
-        setSelectedDoubt(null);
-      }
-      toast.success(response.data.message || 'Doubt deleted successfully!', {
-        duration: 4000,
-        position: 'top-right',
-        icon: '🗑️',
-      });
-    } catch (error) {
-      console.error('Failed to delete doubt:', error.response?.data || error);
-      toast.error(error.response?.data?.message || 'Failed to delete doubt. Please try again.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Delete comment
-  const handleDeleteComment = async (commentId, doubtId) => {
-    if (!window.confirm('Are you sure you want to delete this comment?')) return;
-    try {
-      await axiosInstance.delete(`/discussions/comments/${commentId}`);
-      fetchComments(doubtId);
-      toast.success('Comment deleted successfully!', {
-        duration: 4000,
-        position: 'top-right',
-        icon: '🗑️',
-      });
-    } catch (error) {
-      console.error('Failed to delete comment:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete comment. Please try again.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Handle hashtag input
-  const handleHashtagKeyDown = (e) => {
-    if (e.key === 'Enter' && hashtagInput.trim()) {
-      const tag = hashtagInput.trim().toLowerCase();
-      if (!currentHashtags.includes(tag)) {
-        setCurrentHashtags([...currentHashtags, tag]);
-        toast.success(`Added hashtag: #${tag}`, {
-          duration: 3000,
-          position: 'top-right',
-          icon: '🏷️',
-        });
-      } else {
-        toast.error(`Hashtag #${tag} is already added.`, {
-          duration: 3000,
-          position: 'top-right',
-        });
-      }
-      setHashtagInput('');
-    }
-  };
-
-  // Remove hashtag
-  const removeHashtag = (index) => {
-    const tag = currentHashtags[index];
-    setCurrentHashtags(currentHashtags.filter((_, i) => i !== index));
-    toast.success(`Removed hashtag: #${tag}`, {
-      duration: 3000,
-      position: 'top-right',
-      icon: '🗑️',
-    });
-  };
-
-  // Like doubt
-  const handleLikeDoubt = async (doubtId) => {
-    try {
-      setDoubts((prev) =>
-        prev.map((d) =>
-          d._id === doubtId
-            ? {
-                ...d,
-                likes: d.likes?.includes(doubtId)
-                  ? d.likes.filter((id) => id !== doubtId)
-                  : [...(d.likes || []), doubtId],
-              }
-            : d
-        )
-      );
-      setMyDoubts((prev) =>
-        prev.map((d) =>
-          d._id === doubtId
-            ? {
-                ...d,
-                likes: d.likes?.includes(doubtId)
-                  ? d.likes.filter((id) => id !== doubtId)
-                  : [...(d.likes || []), doubtId],
-              }
-            : d
-        )
-      );
-      if (selectedDoubt?._id === doubtId) {
-        setSelectedDoubt((prev) => ({
-          ...prev,
-          likes: prev.likes?.includes(doubtId)
-            ? prev.likes.filter((id) => id !== doubtId)
-            : [...(prev.likes || []), doubtId],
-        }));
-      }
-      await axiosInstance.put(`/discussions/doubts/${doubtId}/like`);
-      const { data } = await axiosInstance.get(`/discussions/doubts/${doubtId}`);
-      setDoubts((prev) =>
-        prev.map((d) => (d._id === doubtId ? { ...d, likes: data.likes } : d))
-      );
-      setMyDoubts((prev) =>
-        prev.map((d) => (d._id === doubtId ? { ...d, likes: data.likes } : d))
-      );
-      if (selectedDoubt?._id === doubtId) {
-        setSelectedDoubt((prev) => ({ ...prev, likes: data.likes }));
-      }
-      toast.success(
-        data.likes.includes(user?.userId) ? 'Doubt liked!' : 'Doubt unliked!',
-        {
-          duration: 3000,
-          position: 'top-right',
-          icon: data.likes.includes(user?.userId) ? '❤️' : '↩️',
-        }
-      );
-    } catch (error) {
-      console.error('Failed to like doubt:', error);
-      toast.error('Failed to update like status.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-      setDoubts((prev) =>
-        prev.map((d) =>
-          d._id === doubtId
-            ? {
-                ...d,
-                likes: d.likes?.includes(doubtId)
-                  ? d.likes.filter((id) => id !== doubtId)
-                  : [...(d.likes || []), doubtId],
-              }
-            : d
-        )
-      );
-      setMyDoubts((prev) =>
-        prev.map((d) =>
-          d._id === doubtId
-            ? {
-                ...d,
-                likes: d.likes?.includes(doubtId)
-                  ? d.likes.filter((id) => id !== doubtId)
-                  : [...(d.likes || []), doubtId],
-              }
-            : d
-        )
-      );
-      if (selectedDoubt?._id === doubtId) {
-        setSelectedDoubt((prev) => ({
-          ...prev,
-          likes: prev.likes?.includes(doubtId)
-            ? prev.likes.filter((id) => id !== doubtId)
-            : [...(prev.likes || []), doubtId],
-        }));
-      }
-    }
-  };
-
-  // Bookmark doubt
-  const handleBookmarkDoubt = async (doubtId) => {
-    try {
-      const { data } = await axiosInstance.post(`/discussions/doubts/${doubtId}/bookmark`);
-      fetchBookmarkedDoubts();
-      if (selectedDoubt?._id === doubtId) {
-        setSelectedDoubt((prev) => ({
-          ...prev,
-          isBookmarked: data.bookmarked,
-        }));
-      }
-      setDoubts((prev) =>
-        prev.map((d) =>
-          d._id === doubtId ? { ...d, isBookmarked: data.bookmarked } : d
-        )
-      );
-      setMyDoubts((prev) =>
-        prev.map((d) =>
-          d._id === doubtId ? { ...d, isBookmarked: data.bookmarked } : d
-        )
-      );
-      toast.success(
-        data.bookmarked ? 'Doubt bookmarked!' : 'Doubt removed from bookmarks!',
-        {
-          duration: 3000,
-          position: 'top-right',
-          icon: data.bookmarked ? '🔖' : '↩️',
-        }
-      );
-    } catch (error) {
-      console.error('Failed to bookmark doubt:', error);
-      toast.error('Failed to bookmark. Please try again later.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-    }
-  };
-
-  // Like hashtag
-  const handleLikeHashtag = async (hashtagName) => {
-    try {
-      await axiosInstance.put(`/discussions/hashtags/${hashtagName}/like`);
-      fetchPopularHashtags();
-      toast.success(`Hashtag #${hashtagName} liked!`, {
         duration: 3000,
         position: 'top-right',
-        icon: '❤️',
       });
     } catch (error) {
-      console.error('Failed to like hashtag:', error);
-      toast.error('Failed to like hashtag.', {
+      console.error('Error creating doubt:', error);
+      toast.error('Failed to post doubt.', {
         duration: 4000,
         position: 'top-right',
       });
     }
   };
 
-  // Create comment with attachments
-  const handleCreateComment = async (doubtId) => {
-    if (!newComment.trim() && commentAttachments.length === 0) {
-      toast.error('Please provide a comment or attach a file.', {
-        duration: 4000,
-        position: 'top-right',
-      });
-      return;
-    }
+  const handleCommentSubmit = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim() && commentAttachments.length === 0) return;
     try {
       const formData = new FormData();
       formData.append('content', newComment);
-      commentAttachments.forEach((file) => {
-        formData.append('attachments', file);
+      commentAttachments.forEach((file) => formData.append('attachments', file));
+      const response = await axiosInstance.post(`/discussions/doubts/${selectedDoubt._id}/comments`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      await axiosInstance.post(`/discussions/doubts/${doubtId}/comments`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      socket.emit('new_comment', response.data);
       setNewComment('');
       setCommentAttachments([]);
-      fetchComments(doubtId);
-      fetchDoubts();
+      fetchComments(selectedDoubt._id);
       toast.success('Comment posted successfully!', {
-        duration: 4000,
+        duration: 3000,
         position: 'top-right',
-        icon: '💬',
       });
     } catch (error) {
-      console.error('Failed to create comment:', error);
-      toast.error(error.response?.data?.message || 'Error posting comment. Please try again.', {
+      console.error('Error posting comment:', error);
+      toast.error('Failed to post comment.', {
         duration: 4000,
         position: 'top-right',
       });
     }
   };
 
-  // Like comment
-  const handleLikeComment = async (commentId, doubtId) => {
+  const fetchComments = async (doubtId) => {
     try {
-      await axiosInstance.put(`/discussions/comments/${commentId}/like`);
-      fetchComments(doubtId);
-      toast.success('Comment liked!', {
-        duration: 3000,
-        position: 'top-right',
-        icon: '❤️',
-      });
+      const response = await axiosInstance.get(`/discussions/doubts/${doubtId}/comments`);
+      setComments(response.data);
     } catch (error) {
-      console.error('Failed to like comment:', error);
+      console.error('Error fetching comments:', error);
+      toast.error('Failed to load comments.', {
+        duration: 4000,
+        position: 'top-right',
+      });
+    }
+  };
+
+  const handleLikeDoubt = async (doubtId) => {
+    try {
+      const response = await axiosInstance.put(`/discussions/doubts/${doubtId}/like`);
+      socket.emit('like_doubt', { doubtId, likes: response.data.likes });
+    } catch (error) {
+      console.error('Error liking doubt:', error);
+      toast.error('Failed to like doubt.', {
+        duration: 4000,
+        position: 'top-right',
+      });
+    }
+  };
+
+  const handleLikeComment = async (commentId) => {
+    try {
+      const response = await axiosInstance.put(`/discussions/comments/${commentId}/like`);
+      socket.emit('like_comment', { commentId, doubtId: selectedDoubt._id, likes: response.data.likes });
+    } catch (error) {
+      console.error('Error liking comment:', error);
       toast.error('Failed to like comment.', {
         duration: 4000,
         position: 'top-right',
@@ -730,67 +511,105 @@ const AdminDiscussion = () => {
     }
   };
 
-  // Pin/Unpin doubt
   const handlePinDoubt = async (doubtId) => {
     try {
-      const response = await axiosInstance.put(`/discussions/doubts/${doubtId}/pin`);
+      await axiosInstance.put(`/discussions/doubts/${doubtId}/pin`);
       fetchDoubts();
-      if (selectedDoubt?._id === doubtId) {
-        setSelectedDoubt((prev) => ({ ...prev, isPinned: !prev.isPinned }));
-      }
-      toast.success(response.data.message, {
-        duration: 4000,
+      toast.success('Doubt pinned successfully!', {
+        duration: 3000,
         position: 'top-right',
-        icon: '📌',
       });
     } catch (error) {
-      console.error('Error pinning/unpinning doubt:', error);
-      toast.error('Error updating pin status. Please try again.', {
+      console.error('Error pinning doubt:', error);
+      toast.error('Failed to pin doubt.', {
         duration: 4000,
         position: 'top-right',
       });
     }
   };
 
-  // Resolve/Unresolve doubt
   const handleResolveDoubt = async (doubtId) => {
     try {
-      const response = await axiosInstance.put(`/discussions/doubts/${doubtId}/resolve`);
+      await axiosInstance.put(`/discussions/doubts/${doubtId}/resolve`);
       fetchDoubts();
-      if (selectedDoubt?._id === doubtId) {
-        setSelectedDoubt((prev) => ({ ...prev, isResolved: !prev.isResolved }));
-      }
-      toast.success(response.data.message, {
-        duration: 4000,
+      toast.success('Doubt marked as resolved!', {
+        duration: 3000,
         position: 'top-right',
-        icon: '✅',
       });
     } catch (error) {
-      console.error('Error resolving/unresolving doubt:', error);
-      toast.error('Error updating resolve status. Please try again.', {
+      console.error('Error resolving doubt:', error);
+      toast.error('Failed to resolve doubt.', {
         duration: 4000,
         position: 'top-right',
       });
     }
   };
 
-  // Mark notification as read
-  const markNotificationRead = async (notificationId) => {
+  const handleDeleteDoubt = async (doubtId) => {
+    if (window.confirm('Are you sure you want to delete this doubt?')) {
+      try {
+        await axiosInstance.delete(`/discussions/doubts/${doubtId}`);
+        fetchDoubts();
+        if (selectedDoubt?._id === doubtId) setSelectedDoubt(null);
+        toast.success('Doubt deleted successfully!', {
+          duration: 3000,
+          position: 'top-right',
+        });
+      } catch (error) {
+        console.error('Error deleting doubt:', error);
+        toast.error('Failed to delete doubt.', {
+          duration: 4000,
+          position: 'top-right',
+        });
+      }
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (window.confirm('Are you sure you want to delete this comment?')) {
+      try {
+        await axiosInstance.delete(`/discussions/comments/${commentId}`);
+        fetchComments(selectedDoubt._id);
+        toast.success('Comment deleted successfully!', {
+          duration: 3000,
+          position: 'top-right',
+        });
+      } catch (error) {
+        console.error('Error deleting comment:', error);
+        toast.error('Failed to delete comment.', {
+          duration: 4000,
+          position: 'top-right',
+        });
+      }
+    }
+  };
+
+  const handleBookmarkDoubt = async (doubtId) => {
+    try {
+      await axiosInstance.post(`/discussions/doubts/${doubtId}/bookmark`);
+      fetchDoubts();
+      toast.success('Doubt bookmarked!', {
+        duration: 3000,
+        position: 'top-right',
+      });
+    } catch (error) {
+      console.error('Error bookmarking doubt:', error);
+      toast.error('Failed to bookmark doubt.', {
+        duration: 4000,
+        position: 'top-right',
+      });
+    }
+  };
+
+  const handleMarkNotificationRead = async (notificationId) => {
     try {
       await axiosInstance.put(`/discussions/notifications/${notificationId}/read`);
       setNotifications((prev) =>
-        prev.map((n) =>
-          n._id === notificationId ? { ...n, isRead: true } : n
-        )
+        prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n))
       );
       setUnreadCount((prev) => prev - 1);
-      toast.success('Notification marked as read.', {
-        duration: 3000,
-        position: 'top-right',
-        icon: '✅',
-      });
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      console.error('Error marking notification read:', error);
       toast.error('Failed to mark notification as read.', {
         duration: 4000,
         position: 'top-right',
@@ -798,20 +617,17 @@ const AdminDiscussion = () => {
     }
   };
 
-  const markAllNotificationsRead = async () => {
+  const handleMarkAllNotificationsRead = async () => {
     try {
       await axiosInstance.put('/discussions/notifications/mark-all-read');
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, isRead: true }))
-      );
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
       toast.success('All notifications marked as read!', {
-        duration: 4000,
+        duration: 3000,
         position: 'top-right',
-        icon: '✅',
       });
     } catch (error) {
-      console.error('Failed to mark all notifications as read:', error);
+      console.error('Error marking all notifications read:', error);
       toast.error('Failed to mark all notifications as read.', {
         duration: 4000,
         position: 'top-right',
@@ -819,126 +635,43 @@ const AdminDiscussion = () => {
     }
   };
 
-  // Handle hashtag click
-  const handleHashtagClick = (tag) => {
-    setFilters({ ...filters, search: '', hashtag: tag });
-    setShowMyDoubts(false);
+  const handleHashtagClick = (hashtag) => {
+    setFilters({ ...filters, hashtag });
     setShowPopularHashtags(false);
-    setShowMostLiked(false);
-    setShowBookmarks(false);
-    toast.success(`Filtering by hashtag: #${tag}`, {
-      duration: 3000,
-      position: 'top-right',
-      icon: '🏷️',
-    });
   };
 
-  // Handle file upload for doubts
-  const handleFileChange = (e) => {
+  const handleFilterChange = debounce((key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }, 300);
+
+  const handleFileChange = (e, type) => {
     const files = Array.from(e.target.files);
-    setNewDoubt({ ...newDoubt, attachments: files });
-    if (files.length > 0) {
-      toast.success(`${files.length} file(s) selected for upload.`, {
-        duration: 3000,
-        position: 'top-right',
-        icon: '📎',
-      });
+    if (type === 'doubt') {
+      setNewDoubt({ ...newDoubt, attachments: files });
+    } else {
+      setCommentAttachments(files);
     }
   };
 
-  // Handle file upload for comments
-  const handleCommentFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    setCommentAttachments(files);
-    if (files.length > 0) {
-      toast.success(`${files.length} file(s) selected for comment.`, {
-        duration: 3000,
-        position: 'top-right',
-        icon: '📎',
-      });
-    }
-  };
-
-  // Remove comment attachment
-  const removeCommentAttachment = (index) => {
-    const fileName = commentAttachments[index].name;
-    setCommentAttachments(commentAttachments.filter((_, i) => i !== index));
-    toast.success(`Removed attachment: ${fileName}`, {
-      duration: 3000,
-      position: 'top-right',
-      icon: '🗑️',
+  const formatDate = (date) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
-
-  // Handle attachment click
-  const handleAttachmentClick = (file) => {
-    setSelectedAttachment(file);
-    toast.success(`Viewing attachment: ${file.url.split('/').pop()}`, {
-      duration: 3000,
-      position: 'top-right',
-      icon: '📂',
-    });
-  };
-
-  if (loading) {
-    return <LakshyaLoader />;
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Toaster Component for Notifications */}
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          style: {
-            borderRadius: '12px',
-            background: '#ffffff',
-            color: '#333',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-            padding: '12px 16px',
-            fontSize: '14px',
-            fontWeight: '500',
-            border: '1px solid rgba(0, 0, 0, 0.05)',
-            maxWidth: '400px',
-          },
-          success: {
-            style: {
-              background: 'linear-gradient(135deg, #e6fffa 0%, #ccfbf1 100%)',
-              border: '1px solid #5eead4',
-              color: '#115e59',
-            },
-            iconTheme: {
-              primary: '#115e59',
-              secondary: '#e6fffa',
-            },
-          },
-          error: {
-            style: {
-              background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
-              border: '1px solid #f87171',
-              color: '#991b1b',
-            },
-            iconTheme: {
-              primary: '#991b1b',
-              secondary: '#fee2e2',
-            },
-          },
-        }}
-      />
-
-      {/* Header */}
-      <EpicAdminHeader
-        showNotifications={showNotifications}
-        setShowNotifications={setShowNotifications}
-        unreadCount={unreadCount}
-      />
-
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-6 flex-1">
-        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
-          {/* Sidebar */}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100">
+      <Toaster />
+      <EpicAdminHeader />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex flex-col lg:flex-row gap-6">
           <Sidebar
-            isSidebarOpen={isSidebarOpen}
-            setIsSidebarOpen={setIsSidebarOpen}
+            isOpen={isSidebarOpen}
+            setIsOpen={setIsSidebarOpen}
             showMyDoubts={showMyDoubts}
             setShowMyDoubts={setShowMyDoubts}
             showPopularHashtags={showPopularHashtags}
@@ -947,504 +680,431 @@ const AdminDiscussion = () => {
             setShowMostLiked={setShowMostLiked}
             showBookmarks={showBookmarks}
             setShowBookmarks={setShowBookmarks}
-            myDoubts={myDoubts}
             popularHashtags={popularHashtags}
+            handleHashtagClick={handleHashtagClick}
             mostLikedQuestions={mostLikedQuestions}
             bookmarkedDoubts={bookmarkedDoubts}
-            handleViewDoubt={handleViewDoubt}
-            handleHashtagClick={handleHashtagClick}
-            handleLikeHashtag={handleLikeHashtag}
-            className={`fixed inset-y-0 left-0 z-40 w-64 sm:w-80 bg-white shadow-2xl transform ${
-              isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-            } lg:static lg:translate-x-0 transition-transform duration-300 ease-in-out overflow-y-auto`}
+            setSelectedDoubt={setSelectedDoubt}
+            fetchComments={fetchComments}
           />
-
-          {/* Main Content */}
-          <div className="flex-1 space-y-4 sm:space-y-6 mt-0 sm:mt-2 lg:mt-0">
-            {/* Filters Section */}
-            <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6 transition-all duration-300 hover:shadow-2xl">
-              <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4">
-                {/* Search Bar */}
-                <div className="relative flex-1 group min-w-0">
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  <div className="relative">
-                    <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-blue-500 w-4 h-4 sm:w-5 sm:h-5 transition-colors duration-200" />
-                    <input
-                      type="text"
-                      placeholder="Search doubts..."
-                      value={filters.search}
-                      onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                      className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-2 sm:py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 bg-white/50 backdrop-blur-sm hover:bg-white/80 placeholder-gray-500 text-sm sm:text-base"
-                    />
-                  </div>
-                </div>
-
-                {/* Hashtag Filter */}
-                <div className="relative group w-full sm:w-auto">
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  <div className="relative">
-                    <Hash className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-purple-500 w-4 h-4 sm:w-5 sm:h-5 transition-colors duration-200" />
-                    <input
-                      type="text"
-                      placeholder="Filter by hashtag..."
-                      value={filters.hashtag}
-                      onChange={(e) => setFilters({ ...filters, hashtag: e.target.value })}
-                      className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-2 sm:py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-200 bg-white/50 backdrop-blur-sm hover:bg-white/80 placeholder-gray-500 text-sm sm:text-base min-w-[120px] sm:min-w-[140px]"
-                    />
-                  </div>
-                </div>
-
-                {/* Clear Filters Button */}
+          <div className="flex-1">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent flex items-center gap-3">
+                  <MessageCircle className="text-blue-600 w-8 h-8 sm:w-10 sm:h-10" />
+                  Discussion Portal
+                </h1>
+                <p className="text-gray-600 mt-2 text-sm sm:text-base">Engage with doubts, comments, and hashtags</p>
+              </div>
+              <div className="flex items-center gap-3 sm:gap-4">
                 <button
-                  onClick={() => {
-                    setFilters({ search: '', hashtag: '' });
-                    setShowMyDoubts(false);
-                    setShowPopularHashtags(false);
-                    setShowMostLiked(false);
-                    setShowBookmarks(false);
-                    toast.success('Filters cleared!', {
-                      duration: 3000,
-                      position: 'top-right',
-                      icon: '🧹',
-                    });
-                  }}
-                  className="group relative px-4 sm:px-6 py-2 sm:py-3 text-gray-600 hover:text-white transition-all duration-300 rounded-xl overflow-hidden text-sm sm:text-base"
+                  onClick={() => setShowCreateForm(true)}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-gray-400 to-gray-600 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                  <span className="relative flex items-center gap-1 sm:gap-2">
-                    <X className="w-3 h-3 sm:w-4 sm:h-4" />
-                    Clear Filters
-                  </span>
+                  <Plus size={20} />
+                  Post Doubt
                 </button>
-
-                {/* Mobile Sidebar Toggle */}
                 <button
-                  onClick={() => {
-                    setIsSidebarOpen(!isSidebarOpen);
-                    if (!isSidebarOpen) {
-                      setShowMyDoubts(false);
-                      setShowPopularHashtags(false);
-                      setShowMostLiked(false);
-                      setShowBookmarks(false);
-                    }
-                    // toast.success(isSidebarOpen ? 'Sidebar hidden!' : 'Sidebar opened!', {
-                    //   duration: 3000,
-                    //   position: 'top-right',
-                    //   icon: isSidebarOpen ? '🔙' : '📜',
-                    // });
-                  }}
-                  className="lg:hidden group relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
+                  onClick={() => setShowNotifications(true)}
+                  className="relative bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                  <span className="relative flex items-center gap-1 sm:gap-2">
-                    <Filter className="w-3 h-3 sm:w-4 sm:h-4" />
-                    {isSidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'}
-                  </span>
+                  <Bell size={20} />
+                  Notifications
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {unreadCount}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
-
-            {/* Doubts List */}
-            <div className="space-y-4 sm:space-y-6">
-              {doubts.length === 0 ? (
-                <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6 sm:p-8 text-center transform transition-all duration-500 hover:scale-105">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-3 sm:mb-4 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full flex items-center justify-center">
-                    <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-4 sm:p-6 mb-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Filter size={20} className="text-gray-500" />
+                <span className="font-medium text-gray-700">Filters</span>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="text"
+                      placeholder="Search doubts..."
+                      onChange={(e) => handleFilterChange('search', e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
+                    />
                   </div>
-                  <p className="text-gray-600 text-sm sm:text-lg mb-3 sm:mb-4">
-                    {filters.search || filters.hashtag
-                      ? `No doubts found matching "${filters.search || filters.hashtag}"`
-                      : 'No doubts found. Be the first to post one!'}
-                  </p>
-                  {(filters.search || filters.hashtag) && (
-                    <button
-                      onClick={() => {
-                        setFilters({ search: '', hashtag: '' });
-                        toast.success('Showing all doubts!', {
-                          duration: 3000,
-                          position: 'top-right',
-                          icon: '📚',
-                        });
-                      }}
-                      className="group relative px-6 sm:px-8 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
-                    >
-                      <div className="absolute inset-0 bg-white/20 translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                      <span className="relative">Show All Doubts</span>
-                    </button>
-                  )}
                 </div>
-              ) : (
-                doubts.map((doubt, index) => (
+                <div className="flex-1">
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="text"
+                      placeholder="Filter by hashtag..."
+                      onChange={(e) => handleFilterChange('hashtag', e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all duration-200"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            {loading ? (
+              <LakshyaLoader />
+            ) : selectedDoubt ? (
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-4 sm:p-6">
+                <button
+                  onClick={() => {
+                    setSelectedDoubt(null);
+                    setComments([]);
+                  }}
+                  className="flex items-center text-blue-600 hover:text-blue-700 mb-4 transition-colors"
+                >
+                  <ChevronLeft size={20} />
+                  Back to Doubts
+                </button>
+                <DoubtModal
+                  doubt={selectedDoubt}
+                  comments={comments}
+                  renderAuthor={renderAuthor}
+                  handleLikeDoubt={handleLikeDoubt}
+                  handlePinDoubt={handlePinDoubt}
+                  handleResolveDoubt={handleResolveDoubt}
+                  handleDeleteDoubt={handleDeleteDoubt}
+                  handleBookmarkDoubt={handleBookmarkDoubt}
+                  handleLikeComment={handleLikeComment}
+                  handleDeleteComment={handleDeleteComment}
+                  setSelectedAttachment={setSelectedAttachment}
+                />
+                <form onSubmit={handleCommentSubmit} className="mt-6">
+                  <div className="flex flex-col gap-4">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Add a comment..."
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-none"
+                      rows={4}
+                    />
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => handleFileChange(e, 'comment')}
+                      className="border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all duration-200"
+                      accept=".jpg,.jpeg,.png,.gif,.pdf"
+                    />
+                    {commentAttachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {commentAttachments.map((file, index) => (
+                          <div
+                            key={index}
+                            className="bg-gray-50 px-3 py-2 rounded-lg text-sm text-gray-600 flex items-center gap-2"
+                          >
+                            <Paperclip size={14} />
+                            <span>{file.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      className="self-end bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl flex items-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl"
+                    >
+                      <Send size={16} />
+                      Post Comment
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {(showMyDoubts ? myDoubts : showMostLiked ? mostLikedQuestions : showBookmarks ? bookmarkedDoubts : doubts).map((doubt) => (
                   <div
                     key={doubt._id}
-                    className="group bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-500 hover:scale-[1.01] sm:hover:scale-[1.02] hover:border-blue-300/50 overflow-hidden"
-                    style={{
-                      animationDelay: `${index * 100}ms`,
-                      animation: 'slideInUp 0.6s ease-out forwards',
-                    }}
+                    className={`bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border-l-4 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-white/20 ${
+                      doubt.isPinned
+                        ? 'border-l-yellow-500 bg-gradient-to-r from-yellow-50/50 to-transparent'
+                        : doubt.isResolved
+                        ? 'border-l-green-500 bg-gradient-to-r from-green-50/50 to-transparent'
+                        : 'border-l-blue-500 bg-gradient-to-r from-blue-50/50 to-transparent'
+                    }`}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    <div className="relative p-4 sm:p-6 lg:p-8">
-                      <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                    <div className="p-4 sm:p-6">
+                      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
                         <div className="flex-1">
-                          <div className="flex flex-wrap items-center space-x-2 sm:space-x-3 mb-3 sm:mb-4">
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex-shrink-0">{doubt.title}</h3>
                             {doubt.isPinned && (
-                              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-blue-700 rounded-full text-xs font-medium animate-pulse">
-                                <Pin className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                <Pin size={12} className="mr-1" />
                                 Pinned
-                              </div>
+                              </span>
                             )}
                             {doubt.isResolved && (
-                              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-700 rounded-full text-xs font-medium">
-                                <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
+                                <CheckCircle size={12} className="mr-1" />
                                 Resolved
-                              </div>
+                              </span>
                             )}
                           </div>
-                          <h3
-                            className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 cursor-pointer hover:text-transparent hover:bg-clip-text hover:bg-gradient-to-r hover:from-blue-600 hover:to-purple-600 transition-all duration-300 mb-2 sm:mb-3 line-clamp-2"
-                            onClick={() => handleViewDoubt(doubt)}
-                          >
-                            {doubt.title}
-                          </h3>
-                          <p className="text-gray-600 mb-3 sm:mb-4 line-clamp-3 text-sm sm:text-base leading-relaxed">
-                            {doubt.content}
-                          </p>
-                          {doubt.hashtags && doubt.hashtags.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3 sm:mb-4">
-                              {doubt.hashtags.map((tag, tagIndex) => (
-                                <button
-                                  key={tagIndex}
+                          <p className="text-gray-700 mb-4 leading-relaxed">{doubt.content}</p>
+                          {doubt.hashtags?.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-4">
+                              {doubt.hashtags.map((tag, index) => (
+                                <span
+                                  key={index}
+                                  className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-200 cursor-pointer hover:bg-blue-100 transition-all duration-200"
                                   onClick={() => handleHashtagClick(tag)}
-                                  className="group/tag relative inline-flex items-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-blue-500 hover:to-purple-600 hover:text-white transition-all duration-300 hover:shadow-lg hover:scale-105 overflow-hidden"
                                 >
-                                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 translate-x-full group-hover/tag:translate-x-0 transition-transform duration-300"></div>
-                                  <Hash className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 relative" />
-                                  <span className="relative">{tag}</span>
-                                </button>
+                                  #{tag}
+                                </span>
                               ))}
                             </div>
                           )}
                           {doubt.attachments?.length > 0 && (
-                            <div className="mb-4 sm:mb-6">
-                              <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2">
-                                <Paperclip className="w-3 h-3 sm:w-4 sm:h-4" />
-                                Attachments ({doubt.attachments.length})
-                              </h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-                                {doubt.attachments.map((file, fileIndex) => (
-                                  <button
-                                    key={fileIndex}
-                                    onClick={() => handleAttachmentClick(file)}
-                                    className="group/file flex items-center p-2 sm:p-3 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/50 transition-all duration-300 hover:shadow-md hover:scale-105"
+                            <div className="mb-4">
+                              <p className="text-sm font-semibold text-gray-600 mb-2">Attachments ({doubt.attachments.length}):</p>
+                              <div className="flex flex-wrap gap-2">
+                                {doubt.attachments.map((file, index) => (
+                                  <div
+                                    key={index}
+                                    className="px-3 py-2 bg-gray-50 text-gray-700 rounded-lg text-sm font-medium border border-gray-200 cursor-pointer hover:bg-gray-100 transition-all duration-200"
+                                    onClick={() => setSelectedAttachment(file)}
                                   >
-                                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-lg flex items-center justify-center mr-2 sm:mr-3 group-hover/file:from-blue-500/30 group-hover/file:to-purple-500/30 transition-all duration-300">
-                                      <Paperclip className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-                                    </div>
-                                    <span className="text-xs sm:text-sm font-medium text-gray-700 group-hover/file:text-blue-700 transition-colors duration-300 truncate">
-                                      {file.url.split('/').pop().length > 20
-                                        ? `${file.url
-                                            .split('/')
-                                            .pop()
-                                            .substring(0, 20)}...${file.url.split('.').pop()}`
-                                        : file.url.split('/').pop()}
-                                    </span>
-                                  </button>
+                                    <Paperclip size={14} className="inline mr-2" />
+                                    {file.url.split('/').pop()}
+                                  </div>
                                 ))}
                               </div>
                             </div>
                           )}
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs sm:text-sm gap-3 sm:gap-0">
-                            <div className="flex flex-wrap items-center space-x-2 sm:space-x-4 text-gray-500">
-                              <div className="flex items-center gap-1.5 sm:gap-2 ">
-                                {renderAuthor(doubt.author)}
-                              </div>
-                              {doubt.batch && (
-                                <span className="inline-flex items-center px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs font-medium bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 hover:from-blue-100 hover:to-purple-100 transition-all duration-300">
-                                  {doubt.batch.name}
-                                </span>
-                              )}
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                {new Date(doubt.createdAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap items-center space-x-2 sm:space-x-3">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleLikeDoubt(doubt._id);
-                                }}
-                                className={`group/like flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all duration-300 hover:scale-110 ${
-                                  doubt.likes?.includes(doubt._id)
-                                    ? 'text-red-600 bg-red-50'
-                                    : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
-                                }`}
-                              >
-                                <Heart
-                                  className={`w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-300 group-hover/like:scale-125 ${
-                                    doubt.likes?.includes(doubt._id) ? 'fill-current' : ''
-                                  }`}
-                                />
-                                <span className="font-medium">{doubt.likes?.length || 0}</span>
-                              </button>
-                              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-500 bg-gray-50 rounded-lg">
-                                <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
-                                <span className="font-medium">{doubt.views || 0}</span>
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleViewDoubt(doubt);
-                                }}
-                                className="group/comment flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-all duration-300 hover:scale-110"
-                              >
-                                <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-300 group-hover/comment:scale-125" />
-                                <span className="font-medium">{doubt.commentCount || 0}</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleBookmarkDoubt(doubt._id);
-                                }}
-                                className={`group/bookmark p-1.5 sm:p-2 rounded-lg transition-all duration-300 hover:scale-110 ${
-                                  bookmarkedDoubts.some((bd) => bd._id === doubt._id)
-                                    ? 'text-blue-600 bg-blue-50'
-                                    : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'
-                                }`}
-                              >
-                                <Bookmark
-                                  className={`w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-300 group-hover/bookmark:scale-125 ${
-                                    bookmarkedDoubts.some((bd) => bd._id === doubt._id)
-                                      ? 'fill-current'
-                                      : ''
-                                  }`}
-                                />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteDoubt(doubt._id);
-                                }}
-                                className="group/delete p-1.5 sm:p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all duration-300 hover:scale-110"
-                              >
-                                <Trash2 className="w-3 h-3 sm:w-4 sm:h-4 transition-transform duration-300 group-hover/delete:scale-125" />
-                              </button>
-                            </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center text-sm text-gray-500 space-y-2 sm:space-y-0 sm:space-x-4">
+                            <span className="flex items-center">
+                              <Calendar size={14} className="mr-1" />
+                              {formatDate(doubt.createdAt)}
+                            </span>
+                            <span>By: {renderAuthor(doubt.author)}</span>
+                            <span className="flex items-center">
+                              <MessageCircle size={14} className="mr-1" />
+                              {doubt.commentCount || 0} Comments
+                            </span>
+                            <span className="flex items-center">
+                              <Heart size={14} className="mr-1" />
+                              {doubt.likes?.length || 0} Likes
+                            </span>
                           </div>
                         </div>
-                        <div className="flex flex-row sm:flex-col space-x-3 sm:space-x-0 sm:space-y-3 ml-0 sm:ml-4">
+                        <div className="flex items-center space-x-2 flex-shrink-0">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePinDoubt(doubt._id);
+                            onClick={() => {
+                              setSelectedDoubt(doubt);
+                              fetchComments(doubt._id);
                             }}
-                            className={`group/pin p-2 sm:p-3 rounded-xl transition-all duration-300 hover:scale-110 ${
-                              doubt.isPinned
-                                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-blue-600 hover:text-white hover:shadow-lg'
-                            }`}
-                            title={doubt.isPinned ? 'Unpin Doubt' : 'Pin Doubt'}
+                            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105"
+                            title="View Doubt"
                           >
-                            <Pin className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover/pin:rotate-12" />
+                            <Eye size={18} />
                           </button>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleResolveDoubt(doubt._id);
-                            }}
-                            className={`group/resolve p-2 sm:p-3 rounded-xl transition-all duration-300 hover:scale-110 ${
-                              doubt.isResolved
-                                ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gradient-to-r hover:from-green-500 hover:to-green-600 hover:text-white hover:shadow-lg'
-                            }`}
-                            title={doubt.isResolved ? 'Mark Unresolved' : 'Mark Resolved'}
+                            onClick={() => handleLikeDoubt(doubt._id)}
+                            className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 hover:scale-105"
+                            title="Like Doubt"
                           >
-                            <Check className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover/resolve:scale-110" />
+                            <Heart size={18} />
                           </button>
+                          <button
+                            onClick={() => handleBookmarkDoubt(doubt._id)}
+                            className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all duration-200 hover:scale-105"
+                            title="Bookmark Doubt"
+                          >
+                            <Bookmark size={18} />
+                          </button>
+                          {user?.role === 'admin' && (
+                            <>
+                              <button
+                                onClick={() => handlePinDoubt(doubt._id)}
+                                className="p-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all duration-200 hover:scale-105"
+                                title={doubt.isPinned ? 'Unpin Doubt' : 'Pin Doubt'}
+                              >
+                                <Pin size={18} />
+                              </button>
+                              <button
+                                onClick={() => handleResolveDoubt(doubt._id)}
+                                className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-xl transition-all duration-200 hover:scale-105"
+                                title="Resolve Doubt"
+                              >
+                                <CheckCircle size={18} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDoubt(doubt._id)}
+                                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 hover:scale-105"
+                                title="Delete Doubt"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
-                    <div className="h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-
-          {/* Notifications Sidebar */}
           {showNotifications && (
             <NotificationsSidebar
-              showNotifications={showNotifications}
-              setShowNotifications={setShowNotifications}
               notifications={notifications}
+              onClose={() => setShowNotifications(false)}
+              markNotificationRead={handleMarkNotificationRead}
+              markAllNotificationsRead={handleMarkAllNotificationsRead}
               setSelectedDoubt={setSelectedDoubt}
-              generateNotificationMessage={generateNotificationMessage}
-              markNotificationRead={markNotificationRead}
-              markAllNotificationsRead={markAllNotificationsRead}
-              handleViewDoubt={handleViewDoubt}
+              fetchComments={fetchComments}
             />
           )}
         </div>
       </div>
-
-      {/* Create Doubt Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-lg sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-3 sm:mb-4">
-                <h2 className="text-lg sm:text-xl font-semibold">Ask a Doubt</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden">
+            <div className="sticky top-0 bg-white border-b border-gray-100 p-6 z-10">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  Post a Doubt
+                </h2>
                 <button
                   onClick={() => {
                     setShowCreateForm(false);
-                    toast.success('Create doubt form closed.', {
-                      duration: 3000,
-                      position: 'top-right',
-                      icon: '🔙',
-                    });
+                    setNewDoubt({ title: '', content: '', attachments: [] });
+                    setCurrentHashtags([]);
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-xl transition-all duration-200"
                 >
-                  <X className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <X size={24} />
                 </button>
               </div>
-              <div className="space-y-3 sm:space-y-4">
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(95vh-120px)]">
+              <form onSubmit={handleCreateDoubt} className="space-y-6">
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                    Title *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Title *</label>
                   <input
                     type="text"
                     value={newDoubt.title}
                     onChange={(e) => setNewDoubt({ ...newDoubt, title: e.target.value })}
-                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
-                    placeholder="Enter your doubt title..."
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    placeholder="Enter doubt title..."
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                    Description *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Content *</label>
                   <textarea
                     value={newDoubt.content}
                     onChange={(e) => setNewDoubt({ ...newDoubt, content: e.target.value })}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-none"
+                    placeholder="Describe your doubt..."
                     rows={4}
-                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
-                    placeholder="Describe your doubt in detail..."
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                    Hashtags
-                  </label>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                    {currentHashtags.map((tag, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center bg-blue-100 text-blue-800 px-1.5 sm:px-2 py-0.5 rounded-full text-xs"
-                      >
-                        #{tag}
-                        <button
-                          onClick={() => removeHashtag(index)}
-                          className="ml-1 text-blue-600 hover:text-blue-800"
-                        >
-                          <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                        </button>
-                      </div>
-                    ))}
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Hashtags</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={hashtagInput}
+                      onChange={(e) => setHashtagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && hashtagInput.trim()) {
+                          e.preventDefault();
+                          setCurrentHashtags((prev) => [...new Set([...prev, hashtagInput.trim().replace('#', '')])]);
+                          setHashtagInput('');
+                        }
+                      }}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                      placeholder="Add hashtags (press Enter)..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (hashtagInput.trim()) {
+                          setCurrentHashtags((prev) => [...new Set([...prev, hashtagInput.trim().replace('#', '')])]);
+                          setHashtagInput('');
+                        }
+                      }}
+                      className="px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all duration-200"
+                    >
+                      Add
+                    </button>
                   </div>
-                  <input
-                    type="text"
-                    value={hashtagInput}
-                    onChange={(e) => setHashtagInput(e.target.value)}
-                    onKeyDown={handleHashtagKeyDown}
-                    className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
-                    placeholder="Type a hashtag and press Enter"
-                  />
+                  {currentHashtags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {currentHashtags.map((tag, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-200"
+                        >
+                          #{tag}
+                          <button
+                            type="button"
+                            onClick={() => setCurrentHashtags((prev) => prev.filter((_, i) => i !== index))}
+                            className="ml-2 text-blue-700 hover:text-blue-900"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                    Attachments
-                  </label>
-                  <div className="flex items-center space-x-3 sm:space-x-4">
-                    <label className="cursor-pointer">
-                      <span className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center space-x-1.5 sm:space-x-2 text-sm sm:text-base">
-                        <Paperclip className="w-3 h-3 sm:w-4 sm:h-4" />
-                        <span>Choose Files</span>
-                      </span>
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*,.pdf"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                    </label>
-                    {newDoubt.attachments.length > 0 && (
-                      <span className="text-xs sm:text-sm text-gray-500">
-                        {newDoubt.attachments.length} file(s) selected
-                      </span>
-                    )}
-                  </div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Attachments (Max 5 files, 5MB each)</label>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => handleFileChange(e, 'doubt')}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all duration-200"
+                    accept=".jpg,.jpeg,.png,.gif,.pdf"
+                  />
+                  {newDoubt.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {newDoubt.attachments.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center px-3 py-2 bg-gray-50 text-gray-700 rounded-lg text-sm font-medium border border-gray-200"
+                        >
+                          <Paperclip size={14} className="mr-2" />
+                          <span>{file.name}</span>
+                          <span className="ml-2 text-xs">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-end space-x-2 sm:space-x-3 pt-3 sm:pt-4">
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-gray-100">
                   <button
                     type="button"
                     onClick={() => {
                       setShowCreateForm(false);
-                      toast.success('Create doubt form closed.', {
-                        duration: 3000,
-                        position: 'top-right',
-                        icon: '🔙',
-                      });
+                      setNewDoubt({ title: '', content: '', attachments: [] });
+                      setCurrentHashtags([]);
                     }}
-                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm sm:text-base"
+                    className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all duration-200 font-medium"
                   >
                     Cancel
                   </button>
                   <button
-                    type="button"
-                    onClick={handleCreateDoubt}
-                    className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
+                    type="submit"
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center justify-center gap-2 font-medium shadow-lg hover:shadow-xl"
                   >
+                    <Send size={16} />
                     Post Doubt
                   </button>
                 </div>
-              </div>
+              </form>
             </div>
           </div>
         </div>
       )}
-
-      {/* Doubt Detail Modal */}
-      <DoubtModal
-        selectedDoubt={selectedDoubt}
-        setSelectedDoubt={setSelectedDoubt}
-        comments={comments}
-        newComment={newComment}
-        setNewComment={setNewComment}
-        commentAttachments={commentAttachments}
-        handleAttachmentClick={handleAttachmentClick}
-        handleHashtagClick={handleHashtagClick}
-        handleLikeDoubt={handleLikeDoubt}
-        handleBookmarkDoubt={handleBookmarkDoubt}
-        handlePinDoubt={handlePinDoubt}
-        handleResolveDoubt={handleResolveDoubt}
-        handleDeleteDoubt={handleDeleteDoubt}
-        handleCreateComment={handleCreateComment}
-        handleCommentFileChange={handleCommentFileChange}
-        removeCommentAttachment={removeCommentAttachment}
-        handleLikeComment={handleLikeComment}
-        handleDeleteComment={handleDeleteComment}
-        bookmarkedDoubts={bookmarkedDoubts}
-        renderAuthor={renderAuthor}
-      />
-
-      {/* Attachment Popup */}
       {selectedAttachment && (
         <AttachmentPopup
           file={selectedAttachment}
