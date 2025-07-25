@@ -12,8 +12,6 @@ const Sidebar = ({ onCollapseChange }) => {
   const menuItems = [
     { name: 'Dashboard', path: '/', icon: <FaTachometerAlt />, isParent: true },
     { name: 'Exam', path: '/admin-dashboard/exam', icon: <FaPenFancy />, isParent: false },
-    // { name: 'Results', path: '/admin-dashboard/results', icon: <FaMedal />, isParent: false },
-    // { name: 'Results', path: '/admin-dashboard/ResultList', icon: <FaMedal />, isParent: false },
     { name: 'Students', path: '/admin-dashboard/users', icon: <FaUserGraduate />, isParent: false },
     { name: 'Courses', path: '/admin-dashboard/Courses', icon: <FaBookOpen />, isParent: false },
     { name: 'Instructors', path: '/admin-dashboard/Instructors', icon: <FaChalkboardTeacher />, isParent: false },
@@ -120,7 +118,9 @@ const Sidebar = ({ onCollapseChange }) => {
     <>
       <button
         onClick={toggleSidebar}
-        className="md:hidden fixed top-4 left-4 z-[1001] p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 focus:outline-none transition-colors"
+        className={`md:hidden fixed top-4 z-[1001] p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 focus:outline-none transition-colors ${
+          isSidebarVisible ? (collapsed ? 'left-[4.5rem]' : 'left-[17rem]') : 'left-4'
+        }`}
       >
         <FaBars className="text-lg" />
       </button>
