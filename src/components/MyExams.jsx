@@ -148,6 +148,7 @@ const StudentExamPortal = () => {
         response.data.attempt.answers.forEach(answer => {
           savedAnswers[answer.questionId] = {
             selectedOptions: answer.selectedOptions || [],
+            numericalAnswer: answer.numericalAnswer,
             attemptStatus: answer.attemptStatus || 'not_attempted',
           };
         });
@@ -270,31 +271,36 @@ const StudentExamPortal = () => {
     }
   };
 
-  const handleOptionSelect = (optionIndex) => {
-    const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) {
-      console.error('No current question found for option selection');
-      return;
+  const handleAnswerChange = (questionId, questionType, value) => {
+    if (questionType === 'multipleChoice') {
+      const currentSelectedOptions = answers[questionId]?.selectedOptions || [];
+      let newSelectedOptions = [...currentSelectedOptions];
+      const optionIndex = value;
+      const optionPosition = newSelectedOptions.indexOf(optionIndex);
+      if (optionPosition >= 0) {
+        newSelectedOptions.splice(optionPosition, 1);
+      } else {
+        newSelectedOptions.push(optionIndex);
+      }
+      setAnswers({
+        ...answers,
+        [questionId]: {
+          selectedOptions: newSelectedOptions,
+          numericalAnswer: null,
+          attemptStatus: newSelectedOptions.length > 0 ? 'attempted' : 'not_attempted',
+        },
+      });
+    } else if (questionType === 'numerical') {
+      const numericalValue = value !== '' ? parseFloat(value) : null;
+      setAnswers({
+        ...answers,
+        [questionId]: {
+          selectedOptions: [],
+          numericalAnswer: numericalValue,
+          attemptStatus: numericalValue !== null ? 'attempted' : 'not_attempted',
+        },
+      });
     }
-
-    const questionId = currentQuestion._id;
-    const currentSelectedOptions = answers[questionId]?.selectedOptions || [];
-    let newSelectedOptions = [...currentSelectedOptions];
-
-    const optionPosition = newSelectedOptions.indexOf(optionIndex);
-    if (optionPosition >= 0) {
-      newSelectedOptions.splice(optionPosition, 1);
-    } else {
-      newSelectedOptions.push(optionIndex);
-    }
-
-    setAnswers({
-      ...answers,
-      [questionId]: {
-        selectedOptions: newSelectedOptions,
-        attemptStatus: newSelectedOptions.length > 0 ? 'attempted' : 'not_attempted',
-      },
-    });
   };
 
   const markForReview = () => {
@@ -317,6 +323,7 @@ const StudentExamPortal = () => {
       ...prevAnswers,
       [questionId]: {
         selectedOptions: prevAnswers[questionId]?.selectedOptions || [],
+        numericalAnswer: prevAnswers[questionId]?.numericalAnswer || null,
         attemptStatus: 'marked_for_review',
       },
     }));
@@ -355,6 +362,7 @@ const StudentExamPortal = () => {
     const questionId = currentQuestion._id;
     const answerData = answers[questionId] || {
       selectedOptions: [],
+      numericalAnswer: null,
       attemptStatus: 'not_attempted',
     };
 
@@ -364,6 +372,7 @@ const StudentExamPortal = () => {
       const response = await axiosInstance.put(`/studentAnswers/answer/${currentExam._id}`, {
         questionId,
         selectedOptions: answerData.selectedOptions,
+        numericalAnswer: answerData.numericalAnswer,
         timeSpentSeconds,
         attemptStatus: answerData.attemptStatus,
       });
@@ -494,7 +503,7 @@ const StudentExamPortal = () => {
           if (!examEnded && view === 'examInterface') {
             setModalMessage('Time\'s up! Your exam will be submitted automatically.');
             setIsModalOpen(true);
-            submitExam(true); // Pass true for auto-submission
+            submitExam(true);
           }
           return 0;
         }
@@ -610,10 +619,11 @@ const StudentExamPortal = () => {
               <li>The exam must be completed in fullscreen mode.</li>
               <li>Switching tabs, exiting fullscreen, copy-paste, or using keyboard shortcuts will be logged as cheating attempts.</li>
               <li>Multiple cheating attempts may result in automatic disqualification.</li>
-              <li>Questions may have one or multiple correct answers.</li>
+              <li>Questions may be multiple-choice (select one or more options) or numerical (enter a number).</li>
+              <li>For numerical questions, enter your answer as an integer or decimal in the provided input field.</li>
               <li>You can mark questions for review to come back to them later.</li>
               <li>Some questions and options may include LaTeX-formatted math (e.g., $x^2$).</li>
-              <li>Options may include images alongside text.</li>
+              <li>Options may include images alongside text for multiple-choice questions.</li>
               <li>Manual submission is not allowed during exam hours; the exam will be submitted automatically when the time ends.</li>
             </ul>
           </div>
@@ -797,7 +807,7 @@ const StudentExamPortal = () => {
     }
 
     const questionId = currentQuestion._id;
-    const questionAnswers = answers[questionId] || { selectedOptions: [], attemptStatus: 'not_attempted' };
+    const questionAnswers = answers[questionId] || { selectedOptions: [], numericalAnswer: null, attemptStatus: 'not_attempted' };
     const attemptSummary = attempt
       ? {
           total: attempt.totalQuestions,
@@ -970,6 +980,12 @@ const StudentExamPortal = () => {
                         ))}
                       </div>
                     )}
+                    <div>
+                      <span className="text-xs sm:text-sm font-medium text-gray-700">Type: </span>
+                      <span className="inline-block bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded">
+                        {currentQuestion.questionType}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="mb-4 sm:mb-6">
@@ -990,47 +1006,69 @@ const StudentExamPortal = () => {
                   )}
                 </div>
 
-                <div className="space-y-2 sm:space-y-3 mb-6 sm:mb-8">
-                  {currentQuestion.options.map((option, index) => (
-                    <div
-                      key={index}
-                      className={`p-3 rounded-md cursor-pointer border ${
-                        questionAnswers.selectedOptions.includes(index)
-                          ? 'bg-blue-50 border-blue-300'
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                      }`}
-                      onClick={() => handleOptionSelect(index)}
-                    >
-                      <div className="flex items-center">
-                        <div
-                          className={`w-5 h-5 mr-2 sm:mr-3 rounded-full border flex items-center justify-center ${
-                            questionAnswers.selectedOptions.includes(index)
-                              ? 'border-blue-500 bg-blue-500'
-                              : 'border-gray-400'
-                          }`}
-                        >
-                          {questionAnswers.selectedOptions.includes(index) && (
-                            <CheckCircle size={12} className="text-white" />
-                          )}
-                        </div>
-                        <div className="flex flex-col text-sm sm:text-base">
-                          <div>{renderMathOrText(option.optionText)}</div>
-                          {option.imageUrl && (
-                            <img
-                              src={`${BASE_URL}${option.imageUrl}`}
-                              alt={`Option ${index + 1}`}
-                              className="w-full max-h-16 sm:max-h-20 object-contain mt-1 rounded border"
-                              onError={(e) => {
-                                e.target.src = '/fallback-image.jpg';
-                                console.error(`Failed to load image: ${BASE_URL}${option.imageUrl}`);
-                              }}
-                            />
-                          )}
+                {currentQuestion.questionType === 'multipleChoice' ? (
+                  <div className="space-y-2 sm:space-y-3 mb-6 sm:mb-8">
+                    {currentQuestion.options.map((option, index) => (
+                      <div
+                        key={index}
+                        className={`p-3 rounded-md cursor-pointer border ${
+                          questionAnswers.selectedOptions.includes(index)
+                            ? 'bg-blue-50 border-blue-300'
+                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        }`}
+                        onClick={() => handleAnswerChange(questionId, currentQuestion.questionType, index)}
+                      >
+                        <div className="flex items-center">
+                          <div
+                            className={`w-5 h-5 mr-2 sm:mr-3 rounded-full border flex items-center justify-center ${
+                              questionAnswers.selectedOptions.includes(index)
+                                ? 'border-blue-500 bg-blue-500'
+                                : 'border-gray-400'
+                            }`}
+                          >
+                            {questionAnswers.selectedOptions.includes(index) && (
+                              <CheckCircle size={12} className="text-white" />
+                            )}
+                          </div>
+                          <div className="flex flex-col text-sm sm:text-base">
+                            <div>{renderMathOrText(option.optionText)}</div>
+                            {option.imageUrl && (
+                              <img
+                                src={`${BASE_URL}${option.imageUrl}`}
+                                alt={`Option ${index + 1}`}
+                                className="w-full max-h-16 sm:max-h-20 object-contain mt-1 rounded border"
+                                onError={(e) => {
+                                  e.target.src = '/fallback-image.jpg';
+                                  console.error(`Failed to load image: ${BASE_URL}${option.imageUrl}`);
+                                }}
+                              />
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2 sm:space-y-3 mb-6 sm:mb-8">
+                    <label className="block text-sm font-semibold text-gray-700">
+                      Your Answer
+                    </label>
+                    <input
+                      type="number"
+                      value={questionAnswers.numericalAnswer !== null ? questionAnswers.numericalAnswer : ''}
+                      onChange={(e) => handleAnswerChange(questionId, currentQuestion.questionType, e.target.value)}
+                      placeholder="Enter numerical answer (e.g., 3, 2.5)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      step="any"
+                    />
+                    {questionAnswers.numericalAnswer !== null && (
+                      <div className="p-3 bg-gray-50 rounded-lg border">
+                        <p className="text-xs font-medium text-gray-600 mb-2">Preview:</p>
+                        <div className="text-sm">{questionAnswers.numericalAnswer}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-2 sm:gap-0 mt-6 sm:mt-8">
                   <div className="flex flex-col sm:flex-row sm:space-x-2 gap-2 sm:gap-0">

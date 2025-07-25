@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bell, Users, Calendar, Paperclip, X, Eye, Download, FileText, Image, File, ChevronDown, ChevronUp, Filter, AlertCircle } from 'lucide-react';
 import axiosInstance from '../utils/api';
 import io from 'socket.io-client';
+import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
@@ -20,7 +21,9 @@ const MyNotice = () => {
     isImportant: '',
     batchId: '',
   });
-  const [notificationPermission, setNotificationPermission] = useState(Notification?.permission || 'default');
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
   const { user } = useAuth();
 
   // Initialize Socket.IO client
@@ -28,91 +31,161 @@ const MyNotice = () => {
     auth: {
       token: localStorage.getItem('ims_token'),
     },
-    transports: ['websocket', 'polling'], // Fallback to polling if WebSocket fails
+    transports: ['websocket', 'polling'],
   });
 
-  useEffect(() => {
-    // Debug Socket.IO connection
-    // console.log('Socket URL:', SOCKET_URL);
-    // console.log('Token:', localStorage.getItem('ims_token'));
-    // console.log('User:', user);
-    socket.on('connect', () => console.log('Socket.IO connected:', socket.id));
-    socket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
-
-    // Request notification permission
-    requestNotificationPermission();
-
-    // Register service worker and subscribe if user is authenticated
-    if (user?.userId) {
-      registerServiceWorkerAndSubscribe();
-    } else {
-      console.error('No userId available, skipping push subscription');
+  const requestNotificationPermission = async () => {
+    if (typeof Notification === 'undefined') {
+      console.warn('Notifications not supported in this browser');
+      toast.warn('Browser notifications are not supported', {
+        duration: 4000,
+        position: 'top-right',
+      });
+      return;
     }
 
-    // Fetch user batches and join Socket.IO rooms
-    fetchBatches();
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-    // Fetch initial notices
-    fetchNotices();
+    if (isIOS && isSafari) {
+      console.warn('iOS Safari has limited push notification support');
+      toast.warn('Push notifications may not work properly on iOS Safari', {
+        duration: 4000,
+        position: 'top-right',
+      });
+      return;
+    }
 
-    // Listen for new notice events
-    socket.on('new-notice', (notice) => {
-      if (isNoticeRelevant(notice)) {
-        showBrowserNotification(notice);
-        fetchNotices();
+    if (Notification.permission === 'granted') {
+      setNotificationPermission('granted');
+      return;
+    }
+
+    if (Notification.permission === 'denied') {
+      setNotificationPermission('denied');
+      console.warn('Notifications were previously denied');
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      
+      if (permission === 'granted') {
+        console.log('Notification permission granted');
+      } else {
+        console.warn('Notification permission not granted');
       }
-    });
-
-    // Cleanup Socket.IO connection
-    return () => {
-      socket.disconnect();
-    };
-  }, [filters, user]);
-
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window && notificationPermission !== 'granted' && notificationPermission !== 'denied') {
-      try {
-        const permission = await Notification.requestPermission();
-        setNotificationPermission(permission);
-      } catch (error) {
-        console.error('Error requesting notification permission:', error);
-      }
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+      toast.error('Failed to request notification permissions', {
+        duration: 4000,
+        position: 'top-right',
+      });
     }
   };
 
   const registerServiceWorkerAndSubscribe = async () => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      try {
-        const registration = await navigator.serviceWorker.register('/sw.js');
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY),
+    if (!('serviceWorker' in navigator)) {
+      console.error('Service workers not supported');
+      toast.error('Push notifications not supported (no service worker)', {
+        duration: 4000,
+        position: 'top-right',
+      });
+      return;
+    }
+
+    if (!('PushManager' in window)) {
+      console.error('Push notifications not supported');
+      toast.error('Push notifications not supported (no PushManager)', {
+        duration: 4000,
+        position: 'top-right',
+      });
+      return;
+    }
+
+    if (!user?.userId) {
+      console.error('No user ID available for push subscription');
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      console.log('Service Worker registered');
+
+      if (Notification.permission !== 'granted') {
+        console.warn('No notification permission granted');
+        return;
+      }
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY),
+      });
+
+      console.log('Push subscription successful');
+
+      const response = await axiosInstance.post('/push/subscribe', {
+        userId: user.userId,
+        subscription,
+      });
+
+      console.log('Subscription saved to server:', response.data);
+    } catch (err) {
+      console.error('Push subscription failed:', err);
+      
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        toast.warn('Push notifications may not work on iOS. Consider using Safari Push Notifications.', {
+          duration: 4000,
+          position: 'top-right',
         });
-
-        // Use user.userId from AuthContext
-        const userId = user.userId;
-        console.log('User ID for subscription:', userId);
-
-        if (!userId) {
-          console.error('User ID not found for push subscription');
-          return;
-        }
-
-        const response = await axiosInstance.post('/push/subscribe', {
-          userId,
-          subscription,
+      } else {
+        toast.error('Failed to subscribe to push notifications', {
+          duration: 4000,
+          position: 'top-right',
         });
-        console.log('Push subscription response:', response.data);
-      } catch (err) {
-        console.error('Push subscription failed:', err);
       }
     }
   };
+
   const urlBase64ToUint8Array = (base64String) => {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
     const rawData = atob(base64);
     return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+  };
+
+  const showBrowserNotification = (notice) => {
+    if (typeof Notification === 'undefined') {
+      console.log('Notifications not supported');
+      return;
+    }
+
+    if (Notification.permission !== 'granted') {
+      console.log('No notification permission');
+      return;
+    }
+
+    try {
+      const notification = new Notification(notice.title, {
+        body: notice.message,
+        icon: '/notification-icon.png',
+        tag: notice._id || Date.now().toString(),
+        data: {
+          url: window.location.href
+        }
+      });
+
+      notification.onclick = (event) => {
+        event.preventDefault();
+        window.focus();
+        notification.close();
+      };
+
+      console.log('Notification shown:', notification);
+    } catch (error) {
+      console.error('Error showing notification:', error);
+    }
   };
 
   const isNoticeRelevant = (notice) => {
@@ -124,23 +197,47 @@ const MyNotice = () => {
     return false;
   };
 
-  const showBrowserNotification = (notice) => {
-    console.log('Attempting to show notification:', notice);
-    if (notificationPermission === 'granted' && 'Notification' in window) {
-      const notification = new Notification(notice.title, {
-        body: notice.message,
-        icon: '/path/to/notification-icon.png',
-        tag: notice._id || Date.now().toString(),
-      });
-      console.log('Notification created:', notification);
-      notification.onclick = () => {
-        console.log('Notification clicked:', notice.title);
-        window.focus();
-      };
+  useEffect(() => {
+    socket.on('connect', () => console.log('Socket.IO connected:', socket.id));
+    socket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
+
+    requestNotificationPermission();
+
+    if (user?.userId) {
+      registerServiceWorkerAndSubscribe();
     } else {
-      console.log('Notifications not shown. Permission:', notificationPermission);
+      console.error('No userId available, skipping push subscription');
     }
-  };
+
+    fetchBatches();
+    fetchNotices();
+
+    const handleNewNotice = (notice) => {
+      if (isNoticeRelevant(notice)) {
+        setNotices(prev => [notice, ...prev]);
+        
+        if (document.visibilityState !== 'visible') {
+          showBrowserNotification(notice);
+        }
+
+        toast.info(`New notice: ${notice.title}`, {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+    };
+
+    socket.on('new-notice', handleNewNotice);
+
+    return () => {
+      socket.disconnect();
+      socket.off('new-notice', handleNewNotice);
+    };
+  }, [filters, user]);
 
   const fetchNotices = async () => {
     try {
@@ -166,7 +263,6 @@ const MyNotice = () => {
       const userBatches = response.data.data || [];
       setBatches(userBatches);
 
-      // Join Socket.IO rooms for each batch
       userBatches.forEach((batch) => {
         socket.emit('joinBatch', batch._id);
       });
@@ -219,7 +315,6 @@ const MyNotice = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -232,7 +327,6 @@ const MyNotice = () => {
           </div>
         </div>
 
-        {/* Filters */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-4 sm:p-6 mb-6">
           <div className="flex items-center justify-between mb-4 sm:mb-0">
             <div className="flex items-center gap-2">
@@ -285,7 +379,6 @@ const MyNotice = () => {
           </div>
         </div>
 
-        {/* Attachment Modal */}
         {showAttachmentModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
@@ -343,7 +436,6 @@ const MyNotice = () => {
           </div>
         )}
 
-        {/* Notices List */}
         <div className="space-y-6">
           {loading ? (
             <div className="text-center py-16">

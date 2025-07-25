@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import axiosInstance from '../utils/api';
 import { io } from 'socket.io-client';
@@ -136,7 +135,9 @@ const UserDiscussion = () => {
   });
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState(Notification?.permission || 'default');
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
   const { user } = useAuth();
 
   // Debounce function
@@ -186,32 +187,36 @@ const UserDiscussion = () => {
 
   // Initialize socket connection
   useEffect(() => {
-   const newSocket = io(import.meta.env.VITE_SOCKET_URL, {
-  transports: ['websocket'], // iOS fix
-  secure: true,
-  withCredentials: true,
-  auth: {
-    token: localStorage.getItem('ims_token'),
-  },
-});
+    const newSocket = io(import.meta.env.VITE_SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      secure: true,
+      withCredentials: true,
+      auth: { token: localStorage.getItem('ims_token') },
+    });
 
     setSocket(newSocket);
     newSocket.on('connect', () => console.log('Socket.IO connected:', newSocket.id));
     newSocket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
+    newSocket.on('disconnect', () => console.log('Socket.IO disconnected'));
+
     return () => newSocket.disconnect();
   }, []);
 
-  // Request notification permission
+  // Request notification permission with iOS check
   useEffect(() => {
-    if ('Notification' in window && notificationPermission !== 'granted' && notificationPermission !== 'denied') {
+    if (
+      typeof Notification !== 'undefined' &&
+      notificationPermission !== 'granted' &&
+      notificationPermission !== 'denied'
+    ) {
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        console.warn('Web Push not fully supported on iOS. Consider native integration.');
+        return;
+      }
       Notification.requestPermission().then((permission) => {
         setNotificationPermission(permission);
       }).catch((error) => {
         console.error('Error requesting notification permission:', error);
-        toast.error('Failed to request notification permission.', {
-          duration: 4000,
-          position: 'top-right',
-        });
       });
     }
   }, [notificationPermission]);
@@ -230,25 +235,15 @@ const UserDiscussion = () => {
           userId: user.userId,
           subscription,
         });
-        // console.log('Push subscription successful');
-        // toast.success('Subscribed to push notifications!', {
-        //   duration: 4000,
-        //   position: 'top-right',
-        //   icon: '🔔',
-        // });
+        console.log('Push subscription successful');
       } catch (err) {
         console.error('Push subscription failed:', err);
-        toast.error('Failed to subscribe to push notifications.', {
-          duration: 4000,
-          position: 'top-right',
-        });
+        if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+          console.warn('Push notifications may not work on iOS Safari. Consider APNs.');
+        }
       }
     } else {
       console.error('Service worker or userId not available for push subscription');
-      toast.error('Push notifications not supported.', {
-        duration: 4000,
-        position: 'top-right',
-      });
     }
   };
 
@@ -266,7 +261,11 @@ const UserDiscussion = () => {
     socket.on('notification', (notification) => {
       setNotifications((prev) => [notification, ...prev]);
       setUnreadCount((prev) => prev + 1);
-      if (document.visibilityState !== 'visible' && notificationPermission === 'granted') {
+      if (
+        document.visibilityState !== 'visible' &&
+        notificationPermission === 'granted' &&
+        typeof Notification !== 'undefined'
+      ) {
         new Notification('New Notification', {
           body: generateNotificationMessage(notification),
           icon: '/notification-icon.png',
@@ -274,11 +273,6 @@ const UserDiscussion = () => {
         });
       }
       fetchDoubts();
-      toast.success('New notification received!', {
-        duration: 3000,
-        position: 'top-right',
-        icon: '🔔',
-      });
     });
 
     if (user?.userId) {

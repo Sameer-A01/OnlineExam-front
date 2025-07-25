@@ -33,7 +33,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import toast, { Toaster } from 'react-hot-toast'; // Import react-hot-toast
+import toast, { Toaster } from 'react-hot-toast';
 
 // Attachment Popup Component
 const AttachmentPopup = ({ file, onClose }) => {
@@ -133,7 +133,9 @@ const AdminDiscussion = () => {
     hashtag: '',
   });
   const [selectedAttachment, setSelectedAttachment] = useState(null);
-  const [notificationPermission, setNotificationPermission] = useState(Notification?.permission || 'default');
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
   const { user } = useAuth();
 
   // Debounce function
@@ -183,24 +185,32 @@ const AdminDiscussion = () => {
 
   // Initialize socket connection
   useEffect(() => {
-   const newSocket = io(import.meta.env.VITE_SOCKET_URL, {
-  transports: ['websocket'], // iOS fix
-  secure: true,
-  withCredentials: true,
-  auth: {
-    token: localStorage.getItem('ims_token'),
-  },
-});
+    const newSocket = io(import.meta.env.VITE_SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      secure: true,
+      withCredentials: true,
+      auth: { token: localStorage.getItem('ims_token') },
+    });
 
     setSocket(newSocket);
     newSocket.on('connect', () => console.log('Socket.IO connected:', newSocket.id));
     newSocket.on('connect_error', (err) => console.error('Socket.IO connection error:', err.message));
+    newSocket.on('disconnect', () => console.log('Socket.IO disconnected'));
+
     return () => newSocket.disconnect();
   }, []);
 
-  // Request notification permission
+  // Request notification permission with iOS check
   useEffect(() => {
-    if ('Notification' in window && notificationPermission !== 'granted' && notificationPermission !== 'denied') {
+    if (
+      typeof Notification !== 'undefined' &&
+      notificationPermission !== 'granted' &&
+      notificationPermission !== 'denied'
+    ) {
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !('safari' in window && !window.safari.pushNotification)) {
+        console.warn('Web Push not fully supported on iOS. Consider native integration.');
+        return;
+      }
       Notification.requestPermission().then((permission) => {
         setNotificationPermission(permission);
       }).catch((error) => {
@@ -226,6 +236,9 @@ const AdminDiscussion = () => {
         console.log('Push subscription successful');
       } catch (err) {
         console.error('Push subscription failed:', err);
+        if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+          console.warn('Push notifications may not work on iOS Safari. Consider APNs.');
+        }
       }
     } else {
       console.error('Service worker or userId not available for push subscription');
@@ -246,17 +259,20 @@ const AdminDiscussion = () => {
     socket.on('notification', (notification) => {
       setNotifications((prev) => [notification, ...prev]);
       setUnreadCount((prev) => prev + 1);
-      if (document.visibilityState !== 'visible' && notificationPermission === 'granted') {
+      if (
+        document.visibilityState !== 'visible' &&
+        notificationPermission === 'granted' &&
+        typeof Notification !== 'undefined'
+      ) {
         new Notification('New Notification', {
           body: generateNotificationMessage(notification),
           icon: '/notification-icon.png',
           tag: notification._id || Date.now().toString(),
         });
       }
-      fetchDoubts(); // Refresh doubts to include new activity
+      fetchDoubts();
     });
 
-    // Register service worker and subscribe if user is authenticated
     if (user?.userId) {
       registerServiceWorkerAndSubscribe();
     }
@@ -886,7 +902,6 @@ const AdminDiscussion = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Toaster Component for Notifications */}
       <Toaster
         position="top-right"
         toastOptions={{
@@ -926,7 +941,6 @@ const AdminDiscussion = () => {
         }}
       />
 
-      {/* Header */}
       <EpicAdminHeader
         showNotifications={showNotifications}
         setShowNotifications={setShowNotifications}
@@ -935,7 +949,6 @@ const AdminDiscussion = () => {
 
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-6 flex-1">
         <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
-          {/* Sidebar */}
           <Sidebar
             isSidebarOpen={isSidebarOpen}
             setIsSidebarOpen={setIsSidebarOpen}
@@ -959,12 +972,9 @@ const AdminDiscussion = () => {
             } lg:static lg:translate-x-0 transition-transform duration-300 ease-in-out overflow-y-auto`}
           />
 
-          {/* Main Content */}
           <div className="flex-1 space-y-4 sm:space-y-6 mt-0 sm:mt-2 lg:mt-0">
-            {/* Filters Section */}
             <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-4 sm:p-6 transition-all duration-300 hover:shadow-2xl">
               <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4">
-                {/* Search Bar */}
                 <div className="relative flex-1 group min-w-0">
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   <div className="relative">
@@ -979,7 +989,6 @@ const AdminDiscussion = () => {
                   </div>
                 </div>
 
-                {/* Hashtag Filter */}
                 <div className="relative group w-full sm:w-auto">
                   <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   <div className="relative">
@@ -994,7 +1003,6 @@ const AdminDiscussion = () => {
                   </div>
                 </div>
 
-                {/* Clear Filters Button */}
                 <button
                   onClick={() => {
                     setFilters({ search: '', hashtag: '' });
@@ -1018,7 +1026,6 @@ const AdminDiscussion = () => {
                   </span>
                 </button>
 
-                {/* Mobile Sidebar Toggle */}
                 <button
                   onClick={() => {
                     setIsSidebarOpen(!isSidebarOpen);
@@ -1028,11 +1035,6 @@ const AdminDiscussion = () => {
                       setShowMostLiked(false);
                       setShowBookmarks(false);
                     }
-                    // toast.success(isSidebarOpen ? 'Sidebar hidden!' : 'Sidebar opened!', {
-                    //   duration: 3000,
-                    //   position: 'top-right',
-                    //   icon: isSidebarOpen ? '🔙' : '📜',
-                    // });
                   }}
                   className="lg:hidden group relative px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-105 overflow-hidden text-sm sm:text-base"
                 >
@@ -1045,7 +1047,6 @@ const AdminDiscussion = () => {
               </div>
             </div>
 
-            {/* Doubts List */}
             <div className="space-y-4 sm:space-y-6">
               {doubts.length === 0 ? (
                 <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6 sm:p-8 text-center transform transition-all duration-500 hover:scale-105">
@@ -1273,7 +1274,6 @@ const AdminDiscussion = () => {
             </div>
           </div>
 
-          {/* Notifications Sidebar */}
           {showNotifications && (
             <NotificationsSidebar
               showNotifications={showNotifications}
@@ -1289,7 +1289,6 @@ const AdminDiscussion = () => {
         </div>
       </div>
 
-      {/* Create Doubt Modal */}
       {showCreateForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-lg sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1420,7 +1419,6 @@ const AdminDiscussion = () => {
         </div>
       )}
 
-      {/* Doubt Detail Modal */}
       <DoubtModal
         selectedDoubt={selectedDoubt}
         setSelectedDoubt={setSelectedDoubt}
@@ -1444,7 +1442,6 @@ const AdminDiscussion = () => {
         renderAuthor={renderAuthor}
       />
 
-      {/* Attachment Popup */}
       {selectedAttachment && (
         <AttachmentPopup
           file={selectedAttachment}
@@ -1452,7 +1449,6 @@ const AdminDiscussion = () => {
         />
       )}
 
-      {/* CSS Animations */}
       <style jsx>{`
         @keyframes slideInUp {
           from {

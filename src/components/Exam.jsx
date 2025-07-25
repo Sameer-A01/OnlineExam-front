@@ -32,6 +32,7 @@ const ExamAdmin = () => {
   });
   const [questionForm, setQuestionForm] = useState({
     section: '',
+    questionType: 'multipleChoice',
     questionText: '',
     questionImage: null,
     imageUrl: '',
@@ -258,6 +259,7 @@ const ExamAdmin = () => {
     setQuestionForm((prev) => ({
       ...prev,
       [name]: value,
+      ...(name === 'questionType' && value === 'numerical' ? { options: [], correctAnswers: [] } : {}),
     }));
   };
 
@@ -326,6 +328,15 @@ const ExamAdmin = () => {
     setQuestionForm({ ...questionForm, options: updatedOptions });
   };
 
+  // Handle numerical answer input
+  const handleNumericalAnswerInput = (e) => {
+    const value = e.target.value;
+    setQuestionForm((prev) => ({
+      ...prev,
+      correctAnswers: value ? [parseFloat(value)] : [],
+    }));
+  };
+
   // Handle tag input
   const handleTagInput = (e) => {
     if (e.key === 'Enter' && tagInput.trim()) {
@@ -357,7 +368,7 @@ const ExamAdmin = () => {
   // Remove option
   const removeOption = (index) => {
     if (questionForm.options.length <= 2) {
-      alert('A question must have at least 2 options');
+      alert('A multiple-choice question must have at least 2 options');
       return;
     }
     const updatedOptions = questionForm.options.filter((_, i) => i !== index);
@@ -371,7 +382,7 @@ const ExamAdmin = () => {
     });
   };
 
-  // Toggle correct answer
+  // Toggle correct answer for multiple-choice
   const toggleCorrectAnswer = (index) => {
     const currentCorrectAnswers = [...questionForm.correctAnswers];
     const answerIndex = currentCorrectAnswers.indexOf(index);
@@ -388,15 +399,16 @@ const ExamAdmin = () => {
     setEditingQuestion(question);
     setQuestionForm({
       section: question.section || '',
+      questionType: question.questionType || 'multipleChoice',
       questionText: question.questionText,
       questionImage: null,
       imageUrl: question.imageUrl || '',
-      options: question.options.map((opt) => ({
+      options: question.questionType === 'multipleChoice' ? question.options.map((opt) => ({
         optionText: opt.optionText,
         optionImage: null,
         imageUrl: opt.imageUrl || '',
-      })),
-      correctAnswers: question.correctAnswers,
+      })) : [],
+      correctAnswers: question.correctAnswers || [],
       marks: question.marks,
       negativeMarks: question.negativeMarks,
       difficulty: question.difficulty || 'none',
@@ -418,8 +430,12 @@ const ExamAdmin = () => {
       alert('Section is required');
       return;
     }
-    if (questionForm.correctAnswers.length === 0) {
-      alert('Please select at least one correct answer');
+    if (questionForm.questionType === 'multipleChoice' && questionForm.correctAnswers.length === 0) {
+      alert('Please select at least one correct answer for multiple-choice questions');
+      return;
+    }
+    if (questionForm.questionType === 'numerical' && questionForm.correctAnswers.length === 0) {
+      alert('Please provide a numerical answer');
       return;
     }
 
@@ -427,11 +443,14 @@ const ExamAdmin = () => {
       const formData = new FormData();
       formData.append('examId', currentExam._id);
       formData.append('section', questionForm.section);
+      formData.append('questionType', questionForm.questionType);
       formData.append('questionText', questionForm.questionText);
-      formData.append('options', JSON.stringify(questionForm.options.map(opt => ({
-        optionText: opt.optionText,
-        imageUrl: opt.imageUrl || '',
-      }))));
+      if (questionForm.questionType === 'multipleChoice') {
+        formData.append('options', JSON.stringify(questionForm.options.map(opt => ({
+          optionText: opt.optionText,
+          imageUrl: opt.imageUrl || '',
+        }))));
+      }
       questionForm.correctAnswers.forEach((answer, index) => {
         formData.append(`correctAnswers[${index}]`, answer);
       });
@@ -454,14 +473,16 @@ const ExamAdmin = () => {
         formData.append('imageUrl', questionForm.imageUrl);
       }
 
-      questionForm.options.forEach((option, index) => {
-        if (option.optionImage) {
-          formData.append(`optionImages[${index}]`, option.optionImage);
-        }
-        if (editingQuestion && option.imageUrl) {
-          formData.append(`options[${index}][imageUrl]`, option.imageUrl);
-        }
-      });
+      if (questionForm.questionType === 'multipleChoice') {
+        questionForm.options.forEach((option, index) => {
+          if (option.optionImage) {
+            formData.append(`optionImages[${index}]`, option.optionImage);
+          }
+          if (editingQuestion && option.imageUrl) {
+            formData.append(`options[${index}][imageUrl]`, option.imageUrl);
+          }
+        });
+      }
 
       if (editingQuestion) {
         await axiosInstance.put(`/questions/${editingQuestion._id}`, formData, {
@@ -496,6 +517,7 @@ const ExamAdmin = () => {
   const resetQuestionForm = () => {
     setQuestionForm({
       section: '',
+      questionType: 'multipleChoice',
       questionText: '',
       questionImage: null,
       imageUrl: '',
@@ -873,6 +895,21 @@ const ExamAdmin = () => {
                   </select>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Question Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="questionType"
+                    value={questionForm.questionType}
+                    onChange={handleQuestionChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  >
+                    <option value="multipleChoice">Multiple Choice</option>
+                    <option value="numerical">Numerical</option>
+                  </select>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1065,97 +1102,121 @@ const ExamAdmin = () => {
               </div>
             </div>
 
-            <div className="mt-8">
-              <div className="flex justify-between items-center mb-4">
-                <label className="block text-sm font-semibold text-gray-700">
-                  Answer Options <span className="text-red-500">*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={addOption}
-                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors duration-200"
-                >
-                  <Plus size={14} className="mr-1" />
-                  Add Option
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {questionForm.options.map((option, index) => (
-                  <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="flex items-start space-x-3">
-                      <div className="flex items-center pt-2">
-                        <input
-                          type="checkbox"
-                          checked={questionForm.correctAnswers.includes(index)}
-                          onChange={() => toggleCorrectAnswer(index)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      <div className="flex-1 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-gray-700">
-                            Option {String.fromCharCode(65 + index)}
-                          </span>
-                          {questionForm.options.length > 2 && (
-                            <button
-                              type="button"
-                              onClick={() => removeOption(index)}
-                              className="text-red-500 hover:text-red-700 transition-colors duration-200"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
+            {questionForm.questionType === 'multipleChoice' && (
+              <div className="mt-8">
+                <div className="flex justify-between items-center mb-4">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    Answer Options <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addOption}
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors duration-200"
+                  >
+                    <Plus size={14} className="mr-1" />
+                    Add Option
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  {questionForm.options.map((option, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-start space-x-3">
+                        <div className="flex items-center pt-2">
+                          <input
+                            type="checkbox"
+                            checked={questionForm.correctAnswers.includes(index)}
+                            onChange={() => toggleCorrectAnswer(index)}
+                            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
                         </div>
                         
-                        <input
-                          value={option.optionText}
-                          onChange={(e) => handleOptionChange(index, 'optionText', e.target.value)}
-                          placeholder={`Enter option ${String.fromCharCode(65 + index)} (Supports LaTeX)`}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                        />
-                        
-                        {option.optionText && (
-                          <div className="p-2 bg-white rounded border">
-                            <p className="text-xs text-gray-600 mb-1">Preview:</p>
-                            <div className="text-sm">{renderMathOrText(option.optionText)}</div>
+                        <div className="flex-1 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">
+                              Option {String.fromCharCode(65 + index)}
+                            </span>
+                            {questionForm.options.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => removeOption(index)}
+                                className="text-red-500 hover:text-red-700 transition-colors duration-200"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
                           </div>
-                        )}
-                        
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/jpg,image/png"
-                          onChange={(e) => handleOptionImageChange(index, e)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                        />
-                        
-                        {(option.optionImage || option.imageUrl) && (
-                          <div className="mt-2 flex items-center">
-                            <img
-                              src={option.optionImage ? URL.createObjectURL(option.optionImage) : `${BASE_URL}${option.imageUrl}`}
-                              alt={`Option ${String.fromCharCode(65 + index)}`}
-                              className="max-h-24 object-contain rounded border"
-                              onError={(e) => { e.target.src = '/fallback-image.jpg'; }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => clearOptionImage(index)}
-                              className="ml-3 text-red-500 hover:text-red-700 transition-colors duration-200"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
-                        )}
+                          
+                          <input
+                            value={option.optionText}
+                            onChange={(e) => handleOptionChange(index, 'optionText', e.target.value)}
+                            placeholder={`Enter option ${String.fromCharCode(65 + index)} (Supports LaTeX)`}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                          />
+                          
+                          {option.optionText && (
+                            <div className="p-2 bg-white rounded border">
+                              <p className="text-xs text-gray-600 mb-1">Preview:</p>
+                              <div className="text-sm">{renderMathOrText(option.optionText)}</div>
+                            </div>
+                          )}
+                          
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/jpg,image/png"
+                            onChange={(e) => handleOptionImageChange(index, e)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                          />
+                          
+                          {(option.optionImage || option.imageUrl) && (
+                            <div className="mt-2 flex items-center">
+                              <img
+                                src={option.optionImage ? URL.createObjectURL(option.optionImage) : `${BASE_URL}${option.imageUrl}`}
+                                alt={`Option ${String.fromCharCode(65 + index)}`}
+                                className="max-h-24 object-contain rounded border"
+                                onError={(e) => { e.target.src = '/fallback-image.jpg'; }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => clearOptionImage(index)}
+                                className="ml-3 text-red-500 hover:text-red-700 transition-colors duration-200"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Check the box next to correct answer(s)
+                </p>
               </div>
-              <p className="mt-2 text-xs text-gray-500">
-                Check the box next to correct answer(s)
-              </p>
-            </div>
+            )}
+
+            {questionForm.questionType === 'numerical' && (
+              <div className="mt-8">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Correct Answer (Numerical) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  value={questionForm.correctAnswers[0] || ''}
+                  onChange={handleNumericalAnswerInput}
+                  placeholder="Enter the correct numerical answer (e.g., 3, 2.5)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  step="any"
+                />
+                {questionForm.correctAnswers[0] && (
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg border">
+                    <p className="text-xs font-medium text-gray-600 mb-2">Preview:</p>
+                    <div className="text-sm">{questionForm.correctAnswers[0]}</div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-8 flex justify-end space-x-3">
               {editingQuestion && (
@@ -1240,6 +1301,9 @@ const ExamAdmin = () => {
                                     {question.difficulty}
                                   </span>
                                 )}
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                  {question.questionType}
+                                </span>
                               </div>
                             </div>
                             
@@ -1277,42 +1341,55 @@ const ExamAdmin = () => {
                               </div>
                             )}
 
-                            <div className="space-y-2">
-                              {question.options.map((option, optIndex) => (
-                                <div
-                                  key={optIndex}
-                                  className={`p-3 rounded-lg border ${
-                                    question.correctAnswers.includes(optIndex)
-                                      ? 'bg-green-50 border-green-200'
-                                      : 'bg-gray-50 border-gray-200'
-                                  }`}
-                                >
-                                  <div className="flex items-start space-x-3">
-                                    <span className="inline-flex items-center justify-center w-6 h-6 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-full">
-                                      {String.fromCharCode(65 + optIndex)}
-                                    </span>
-                                    <div className="flex-1">
-                                      <div className="text-sm text-gray-900">
-                                        {renderMathOrText(option.optionText)}
+                            {question.questionType === 'multipleChoice' && question.options.length > 0 && (
+                              <div className="space-y-2">
+                                {question.options.map((option, optIndex) => (
+                                  <div
+                                    key={optIndex}
+                                    className={`p-3 rounded-lg border ${
+                                      question.correctAnswers.includes(optIndex)
+                                        ? 'bg-green-50 border-green-200'
+                                        : 'bg-gray-50 border-gray-200'
+                                    }`}
+                                  >
+                                    <div className="flex items-start space-x-3">
+                                      <span className="inline-flex items-center justify-center w-6 h-6 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-full">
+                                        {String.fromCharCode(65 + optIndex)}
+                                      </span>
+                                      <div className="flex-1">
+                                        <div className="text-sm text-gray-900">
+                                          {renderMathOrText(option.optionText)}
+                                        </div>
+                                        {option.imageUrl && (
+                                          <img
+                                            src={`${BASE_URL}${option.imageUrl}`}
+                                            alt={`Option ${String.fromCharCode(65 + optIndex)}`}
+                                            className="max-h-20 object-contain mt-2 rounded"
+                                            onError={(e) => { e.target.src = '/fallback-image.jpg'; console.error(`Failed to load image: ${BASE_URL}${option.imageUrl}`); }}
+                                          />
+                                        )}
                                       </div>
-                                      {option.imageUrl && (
-                                        <img
-                                          src={`${BASE_URL}${option.imageUrl}`}
-                                          alt={`Option ${String.fromCharCode(65 + optIndex)}`}
-                                          className="max-h-20 object-contain mt-2 rounded"
-                                          onError={(e) => { e.target.src = '/fallback-image.jpg'; console.error(`Failed to load image: ${BASE_URL}${option.imageUrl}`); }}
-                                        />
+                                      {question.correctAnswers.includes(optIndex) && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                          Correct
+                                        </span>
                                       )}
                                     </div>
-                                    {question.correctAnswers.includes(optIndex) && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                        Correct
-                                      </span>
-                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {question.questionType === 'numerical' && (
+                              <div className="p-3 rounded-lg border bg-green-50 border-green-200">
+                                <div className="flex items-start space-x-3">
+                                  <span className="text-sm font-medium text-gray-700">Correct Answer:</span>
+                                  <div className="text-sm text-gray-900">
+                                    {question.correctAnswers.join(', ')}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            )}
 
                             {question.tags && question.tags.length > 0 && (
                               <div className="flex flex-wrap gap-2">
@@ -1366,6 +1443,7 @@ const ExamAdmin = () => {
       {view === 'createExam' && renderExamForm(false)}
       {view === 'editExam' && renderExamForm(true)}
       {view === 'questions' && renderQuestionManagement()}
+
     </div>
   );
 };
