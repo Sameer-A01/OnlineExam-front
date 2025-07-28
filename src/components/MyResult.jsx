@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../utils/api';
 import { format } from 'date-fns';
@@ -10,7 +11,7 @@ import {
   CheckCircle, XCircle, Star, MessageSquare, ThumbsUp, Brain, 
   BarChart3, PieChart as PieChartIcon, Activity, Calendar,
   ArrowLeft, Eye, FileText, Shield, Lightbulb, Timer,
-  ChevronRight
+  ChevronRight, Search
 } from 'lucide-react';
 import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
@@ -40,7 +41,10 @@ const MyResult = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState({ mood: '', comments: '', rating: null, confidenceLevel: null });
-  const [expandedQuestions, setExpandedQuestions] = useState({}); // Track expanded question text
+  const [expandedQuestions, setExpandedQuestions] = useState({});
+  const [currentPage, setCurrentPage] = useState(1); // Pagination state
+  const [searchQuery, setSearchQuery] = useState(''); // Search state
+  const questionsPerPage = 10;
 
   // Fetch exams and attempts
   useEffect(() => {
@@ -98,10 +102,8 @@ const MyResult = () => {
       if (response.data.success) {
         const attempt = response.data.attempt;
         
-        // Ensure analytics data exists
         const analytics = attempt.performanceAnalytics || {};
         
-        // Calculate correct/incorrect counts if not present
         if (!analytics.correctCount || !analytics.incorrectCount) {
           let correct = 0;
           let incorrect = 0;
@@ -110,24 +112,14 @@ const MyResult = () => {
             const question = answer.questionId;
             if (!question) return;
             
-            if (question.questionType === 'multipleChoice') {
-              const selected = (answer.selectedOptions || []).sort().join(',');
-              const correctAnswers = (question.correctAnswers || []).sort().join('');
-              
-              if (answer.attemptStatus === 'attempted' || answer.attemptStatus === 'marked_for_review') {
-                if (selected === correctAnswers && selected !== '') {
-                  correct++;
-                } else if (answer.selectedOptions.length > 0) {
-                  incorrect++;
-                }
-              }
-            } else if (question.questionType === 'numerical') {
-              if (answer.attemptStatus === 'attempted' || answer.attemptStatus === 'marked_for_review') {
-                if (answer.numericalAnswer !== null && answer.numericalAnswer === question.correctAnswers?.[0]) {
-                  correct++;
-                } else if (answer.numericalAnswer !== null) {
-                  incorrect++;
-                }
+            const selected = (answer.selectedOptions || []).sort().join(',');
+            const correctAnswers = (question.correctAnswers || []).sort().join(',');
+            
+            if (answer.attemptStatus === 'attempted' || answer.attemptStatus === 'marked_for_review') {
+              if (selected === correctAnswers && selected !== '') {
+                correct++;
+              } else {
+                incorrect++;
               }
             }
           });
@@ -150,6 +142,8 @@ const MyResult = () => {
           rating: attempt.feedback?.rating || null,
           confidenceLevel: attempt.feedback?.confidenceLevel || null,
         });
+        setCurrentPage(1); // Reset to first page when loading new attempt
+        setSearchQuery(''); // Reset search query
       }
     } catch (err) {
       setError('Error fetching attempt details: ' + err.message);
@@ -275,9 +269,26 @@ const MyResult = () => {
     }));
   };
 
+  // Pagination and Search Logic
+  const filteredAnswers = selectedAttempt?.answers?.filter((answer) => {
+    const question = answer.questionId;
+    if (!question?.questionText) return false;
+    return question.questionText.toLowerCase().includes(searchQuery.toLowerCase());
+  }) || [];
+
+  const totalPages = Math.ceil(filteredAnswers.length / questionsPerPage);
+  const indexOfLastQuestion = currentPage * questionsPerPage;
+  const indexOfFirstQuestion = indexOfLastQuestion - questionsPerPage;
+  const currentAnswers = filteredAnswers.slice(indexOfFirstQuestion, indexOfLastQuestion);
+
+  const handlePageChange = (pageNumber) => {
+    setCurrentPage(pageNumber);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
- fifth element      <div className="container mx-auto p-4 sm:p-6">
+      <div className="container mx-auto p-4 sm:p-6">
         {/* Header Section */}
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
@@ -483,7 +494,7 @@ const MyResult = () => {
                         <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600 mx-auto mb-2" />
                         <p className="text-xs sm:text-sm text-gray-600">Duration</p>
                         <p className="text-xl sm:text-3xl font-bold text-orange-600">
-                          {selectedAttempt.durationMinutes || 'N/A'} min
+                          {selectedAttempt.durationMinutes || 'N/A'}min
                         </p>
                       </div>
                     </div>
@@ -756,79 +767,103 @@ const MyResult = () => {
                     <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-indigo-600" />
                     Question-wise Analysis
                   </h3>
+
+                  {/* Search Bar */}
+                  <div className="mb-6">
+                    <div className="relative">
+                      <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setCurrentPage(1); // Reset to first page on search
+                        }}
+                        placeholder="Search questions..."
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                      />
+                    </div>
+                    {searchQuery && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        Found {filteredAnswers.length} question{filteredAnswers.length !== 1 ? 's' : ''} matching "{searchQuery}"
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Questions List */}
                   <div className="space-y-4 sm:space-y-6">
-                    {selectedAttempt.answers.map((answer, index) => {
-                      const question = answer.questionId;
-                      const explanation = selectedAttempt.questionExplanations?.find(
-                        (exp) => exp.questionId.toString() === question._id.toString()
-                      );
-                      let isCorrect = false;
-                      if (question.questionType === 'multipleChoice') {
-                        isCorrect =
+                    {filteredAnswers.length === 0 ? (
+                      <div className="text-center py-6">
+                        <p className="text-gray-600 text-sm sm:text-base">No questions match your search.</p>
+                      </div>
+                    ) : (
+                      currentAnswers.map((answer, index) => {
+                        const globalIndex = selectedAttempt.answers.findIndex(a => a._id === answer._id);
+                        const question = answer.questionId;
+                        const explanation = selectedAttempt.questionExplanations?.find(
+                          (exp) => exp.questionId.toString() === question._id.toString()
+                        );
+                        const isCorrect =
                           answer.selectedOptions?.sort().join(',') ===
                           question.correctAnswers?.sort().join(',');
-                      } else if (question.questionType === 'numerical') {
-                        isCorrect = answer.numericalAnswer !== null && answer.numericalAnswer === question.correctAnswers?.[0];
-                      }
-                      const isExpanded = expandedQuestions[index];
+                        const isExpanded = expandedQuestions[globalIndex];
 
-                      return (
-                        <div key={answer._id || index} className="border border-gray-200 rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow">
-                          <div className="flex flex-col sm:flex-row items-start justify-between mb-4">
-                            <h4 className="font-semibold text-gray-800 flex items-center flex-1">
-                              <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs sm:text-sm mr-3">
-                                Q{index + 1}
-                              </span>
-                              <div className={`flex-1 ${!isExpanded ? 'line-clamp-3 sm:line-clamp-2' : ''} break-words`}>
-                                {renderMathOrText(question.questionText)}
+                        return (
+                          <div key={answer._id || globalIndex} className="border border-gray-200 rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow">
+                            <div className="flex flex-col sm:flex-row items-start justify-between mb-4">
+                              <h4 className="font-semibold text-gray-800 flex items-center flex-1">
+                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs sm:text-sm mr-3">
+                                  Q{globalIndex + 1}
+                                </span>
+                                <div className={`flex-1 ${!isExpanded ? 'line-clamp-3 sm:line-clamp-2' : ''} break-words`}>
+                                  {renderMathOrText(question.questionText)}
+                                </div>
+                              </h4>
+                              <div className="flex items-center space-x-2 mt-2 sm:mt-0">
+                                {isCorrect ? (
+                                  <div className="flex items-center text-green-600">
+                                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                                    <span className="text-xs sm:text-sm font-medium">Correct</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center text-red-600">
+                                    <XCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                                    <span className="text-xs sm:text-sm font-medium">Incorrect</span>
+                                  </div>
+                                )}
                               </div>
-                            </h4>
-                            <div className="flex items-center space-x-2 mt-2 sm:mt-0">
-                              {isCorrect ? (
-                                <div className="flex items-center text-green-600">
-                                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
-                                  <span className="text-xs sm:text-sm font-medium">Correct</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center text-red-600">
-                                  <XCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
-                                  <span className="text-xs sm:text-sm font-medium">Incorrect</span>
-                                </div>
-                              )}
                             </div>
-                          </div>
-                          {question.questionText?.length > 100 && (
-                            <button
-                              onClick={() => toggleQuestionExpansion(index)}
-                              className="text-indigo-600 hover:text-indigo-700 text-xs sm:text-sm font-medium mb-4"
-                            >
-                              {isExpanded ? 'Show Less' : 'Show More'}
-                            </button>
-                          )}
+                            {question.questionText?.length > 100 && (
+                              <button
+                                onClick={() => toggleQuestionExpansion(globalIndex)}
+                                className="text-indigo-600 hover:text-indigo-700 text-xs sm:text-sm font-medium mb-4"
+                              >
+                                {isExpanded ? 'Show Less' : 'Show More'}
+                              </button>
+                            )}
 
-                          {question.imageUrl && question.imageUrl !== '' && (
-                            <div className="mb-4">
-                              <img
-                                src={`${BASE_URL}${question.imageUrl}`}
-                                alt="Question image"
-                                className="max-w-full h-auto rounded-lg border border-gray-200"
-                                onError={(e) => {
-                                  console.error(`Failed to load question image: ${BASE_URL}${question.imageUrl}`);
-                                  console.error(`Question ID: ${question._id}, Exam ID: ${selectedAttempt.examId._id}`);
-                                  e.target.src = '/placeholder-image.jpg';
-                                }}
-                                onLoad={() => console.log(`Successfully loaded question image: ${BASE_URL}${question.imageUrl}`)}
-                              />
-                            </div>
-                          )}
+                            {question.imageUrl && question.imageUrl !== '' && (
+                              <div className="mb-4">
+                                <img
+                                  src={`${BASE_URL}${question.imageUrl}`}
+                                  alt="Question image"
+                                  className="max-w-full h-auto rounded-lg border border-gray-200"
+                                  onError={(e) => {
+                                    console.error(`Failed to load question image: ${BASE_URL}${question.imageUrl}`);
+                                    console.error(`Question ID: ${question._id}, Exam ID: ${selectedAttempt.examId._id}`);
+                                    e.target.src = '/placeholder-image.jpg';
+                                  }}
+                                  onLoad={() => console.log(`Successfully loaded question image: ${BASE_URL}${question.imageUrl}`)}
+                                />
+                              </div>
+                            )}
 
-                          {question.questionType === 'multipleChoice' ? (
                             <div className="mb-4">
                               <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">All Options</p>
                               <div className="space-y-2">
                                 {question.options?.map((option, optIndex) => {
-                                  const isSelected = answer.selectedOptions?.includes(optIndex);
-                                  const isCorrectOption = question.correctAnswers?.includes(optIndex);
+                                  const isSelected = answer.selectedOptions?.includes(optIndex.toString());
+                                  const isCorrectOption = question.correctAnswers?.includes(optIndex.toString());
                                   return (
                                     <div
                                       key={optIndex}
@@ -874,124 +909,140 @@ const MyResult = () => {
                                 })}
                               </div>
                             </div>
-                          ) : (
-                            <div className="mb-4">
-                              <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Question Type</p>
-                              <span className="inline-block bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded">
-                                Numerical
-                              </span>
-                            </div>
-                          )}
 
-                          <div className="grid grid-cols-1 gap-4 mb-4">
-                            <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-                              <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Your Answer</p>
-                              <p className="text-gray-800 text-sm break-words">
-                                {question.questionType === 'multipleChoice' ? (
-                                  answer.selectedOptions?.length > 0
+                            <div className="grid grid-cols-1 gap-4 mb-4">
+                              <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                                <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Your Answer</p>
+                                <p className="text-gray-800 text-sm break-words">
+                                  {answer.selectedOptions?.length > 0
                                     ? answer.selectedOptions
                                         .map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
                                         .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])
-                                    : 'Not answered'
-                                ) : (
-                                  answer.numericalAnswer !== null
-                                    ? answer.numericalAnswer
-                                    : 'Not answered'
-                                )}
-                              </p>
-                              {question.questionType === 'multipleChoice' && answer.selectedOptions?.map((opt, i) => (
-                                question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
-                                  <img
-                                    key={i}
-                                    src={`${BASE_URL}${question.options[opt].imageUrl}`}
-                                    alt={`Option ${opt} image`}
-                                    className="mt-2 max-w-full h-auto rounded border border-gray-200"
-                                    onError={(e) => {
-                                      console.error(`Failed to load option image: ${BASE_URL}${question.options[opt].imageUrl}`);
-                                      e.target.src = '/placeholder-image.jpg';
-                                    }}
-                                    onLoad={() => console.log(`Successfully loaded option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
-                                  />
-                                ) : null
-                              ))}
-                            </div>
-
-                            <div className="bg-green-50 rounded-lg p-3 sm:p-4">
-                              <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Correct Answer</p>
-                              <p className="text-green-800 text-sm break-words">
-                                {question.questionType === 'multipleChoice' ? (
-                                  question.correctAnswers
-                                    ?.map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
-                                    .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])
-                                ) : (
-                                  question.correctAnswers && question.correctAnswers.length > 0
-                                    ? question.correctAnswers[0]
-                                    : (console.warn(`Correct answer missing for numerical question ID: ${question._id}`), 'Not available')
-                                )}
-                              </p>
-                              {question.questionType === 'multipleChoice' && question.correctAnswers?.map((opt, i) => (
-                                question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
-                                  <img
-                                    key={i}
-                                    src={`${BASE_URL}${question.options[opt].imageUrl}`}
-                                    alt={`Correct option ${opt} image`}
-                                    className="mt-2 max-w-full h-auto rounded border border-gray-200"
-                                    onError={(e) => {
-                                      console.error(`Failed to load correct option image: ${BASE_URL}${question.options[opt].imageUrl}`);
-                                      e.target.src = '/placeholder-image.jpg';
-                                    }}
-                                    onLoad={() => console.log(`Successfully loaded correct option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
-                                  />
-                                ) : null
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-4 text-xs sm:text-sm text-gray-600 mb-4">
-                            <div className="flex items-center">
-                              <Clock className="w-4 h-4 mr-1" />
-                              <span>Time: {answer.timeSpentSeconds || 0}s</span>
-                            </div>
-                            <div className="flex items-center">
-                              <FileText className="w-4 h-4 mr-1" />
-                              <span>Status: {answer.attemptStatus || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center">
-                              <BookOpen className="w-4 h-4 mr-1" />
-                              <span>Section: {answer.section || 'N/A'}</span>
-                            </div>
-                          </div>
-
-                          {(explanation?.explanation || explanation?.explanationImageUrl) && (
-                            <div className="bg-blue-50 border-l-4 border-blue-400 rounded-lg p-3 sm:p-4">
-                              <div className="flex items-start">
-                                <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mr-2 mt-0.5" />
-                                <div>
-                                  <p className="font-medium text-blue-800 text-xs sm:text-sm mb-1">Explanation</p>
-                                  {explanation.explanation && (
-                                    <p className="text-blue-700 text-sm break-words">{renderMathOrText(explanation.explanation)}</p>
-                                  )}
-                                  {explanation.explanationImageUrl && explanation.explanationImageUrl !== '' && (
+                                    : 'Not answered'}
+                                </p>
+                                {answer.selectedOptions?.map((opt, i) => (
+                                  question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
                                     <img
-                                      src={`${BASE_URL}${explanation.explanationImageUrl}`}
-                                      alt="Explanation image"
+                                      key={i}
+                                      src={`${BASE_URL}${question.options[opt].imageUrl}`}
+                                      alt={`Option ${opt} image`}
                                       className="mt-2 max-w-full h-auto rounded border border-gray-200"
                                       onError={(e) => {
-                                        console.error(`Failed to load explanation image: ${BASE_URL}${explanation.explanationImageUrl}`);
-                                        console.error(`Question ID: ${question._id}, Exam ID: ${selectedAttempt.examId._id}`);
+                                        console.error(`Failed to load option image: ${BASE_URL}${question.options[opt].imageUrl}`);
                                         e.target.src = '/placeholder-image.jpg';
                                       }}
-                                      onLoad={() => console.log(`Successfully loaded explanation image: ${BASE_URL}${explanation.explanationImageUrl}`)}
+                                      onLoad={() => console.log(`Successfully loaded option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
                                     />
-                                  )}
-                                </div>
+                                  ) : null
+                                ))}
+                              </div>
+
+                              <div className="bg-green-50 rounded-lg p-3 sm:p-4">
+                                <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Correct Answer</p>
+                                <p className="text-green-800 text-sm break-words">
+                                  {question.correctAnswers
+                                    ?.map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
+                                    .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])}
+                                </p>
+                                {question.correctAnswers?.map((opt, i) => (
+                                  question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
+                                    <img
+                                      key={i}
+                                      src={`${BASE_URL}${question.options[opt].imageUrl}`}
+                                      alt={`Correct option ${opt} image`}
+                                      className="mt-2 max-w-full h-auto rounded border border-gray-200"
+                                      onError={(e) => {
+                                        console.error(`Failed to load correct option image: ${BASE_URL}${question.options[opt].imageUrl}`);
+                                        e.target.src = '/placeholder-image.jpg';
+                                      }}
+                                      onLoad={() => console.log(`Successfully loaded correct option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
+                                    />
+                                  ) : null
+                                ))}
                               </div>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+
+                            <div className="flex flex-wrap gap-4 text-xs sm:text-sm text-gray-600 mb-4">
+                              <div className="flex items-center">
+                                <Clock className="w-4 h-4 mr-1" />
+                                <span>Time: {answer.timeSpentSeconds || 0}s</span>
+                              </div>
+                              <div className="flex items-center">
+                                <FileText className="w-4 h-4 mr-1" />
+                                <span>Status: {answer.attemptStatus || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center">
+                                <BookOpen className="w-4 h-4 mr-1" />
+                                <span>Section: {answer.section || 'N/A'}</span>
+                              </div>
+                            </div>
+
+                            {(explanation?.explanation || explanation?.explanationImageUrl) && (
+                              <div className="bg-blue-50 border-l-4 border-blue-400 rounded-lg p-3 sm:p-4">
+                                <div className="flex items-start">
+                                  <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mr-2 mt-0.5" />
+                                  <div>
+                                    <p className="font-medium text-blue-800 text-xs sm:text-sm mb-1">Explanation</p>
+                                    {explanation.explanation && (
+                                      <p className="text-blue-700 text-sm break-words">{renderMathOrText(explanation.explanation)}</p>
+                                    )}
+                                    {explanation.explanationImageUrl && explanation.explanationImageUrl !== '' && (
+                                      <img
+                                        src={`${BASE_URL}${explanation.explanationImageUrl}`}
+                                        alt="Explanation image"
+                                        className="mt-2 max-w-full h-auto rounded border border-gray-200"
+                                        onError={(e) => {
+                                          console.error(`Failed to load explanation image: ${BASE_URL}${explanation.explanationImageUrl}`);
+                                          console.error(`Question ID: ${question._id}, Exam ID: ${selectedAttempt.examId._id}`);
+                                          e.target.src = '/placeholder-image.jpg';
+                                        }}
+                                        onLoad={() => console.log(`Successfully loaded explanation image: ${BASE_URL}${explanation.explanationImageUrl}`)}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="mt-6 flex justify-center items-center space-x-2">
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <div className="flex space-x-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                          <button
+                            key={page}
+                            onClick={() => handlePageChange(page)}
+                            className={`px-3 py-2 rounded-lg ${
+                              currentPage === page
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                            } transition-colors`}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
