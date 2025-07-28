@@ -42,8 +42,8 @@ const MyResult = () => {
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState({ mood: '', comments: '', rating: null, confidenceLevel: null });
   const [expandedQuestions, setExpandedQuestions] = useState({});
-  const [currentPage, setCurrentPage] = useState(1); // Pagination state
-  const [searchQuery, setSearchQuery] = useState(''); // Search state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
   const questionsPerPage = 10;
 
   // Fetch exams and attempts
@@ -112,14 +112,24 @@ const MyResult = () => {
             const question = answer.questionId;
             if (!question) return;
             
-            const selected = (answer.selectedOptions || []).sort().join(',');
-            const correctAnswers = (question.correctAnswers || []).sort().join(',');
-            
-            if (answer.attemptStatus === 'attempted' || answer.attemptStatus === 'marked_for_review') {
-              if (selected === correctAnswers && selected !== '') {
-                correct++;
-              } else {
-                incorrect++;
+            if (question.questionType === 'multipleChoice') {
+              const selected = (answer.selectedOptions || []).sort().join(',');
+              const correctAnswers = (question.correctAnswers || []).sort().join('');
+              
+              if (answer.attemptStatus === 'attempted' || answer.attemptStatus === 'marked_for_review') {
+                if (selected === correctAnswers && selected !== '') {
+                  correct++;
+                } else if (answer.selectedOptions.length > 0) {
+                  incorrect++;
+                }
+              }
+            } else if (question.questionType === 'numerical') {
+              if (answer.attemptStatus === 'attempted' || answer.attemptStatus === 'marked_for_review') {
+                if (answer.numericalAnswer !== null && answer.numericalAnswer === question.correctAnswers?.[0]) {
+                  correct++;
+                } else if (answer.numericalAnswer !== null) {
+                  incorrect++;
+                }
               }
             }
           });
@@ -142,8 +152,8 @@ const MyResult = () => {
           rating: attempt.feedback?.rating || null,
           confidenceLevel: attempt.feedback?.confidenceLevel || null,
         });
-        setCurrentPage(1); // Reset to first page when loading new attempt
-        setSearchQuery(''); // Reset search query
+        setCurrentPage(1);
+        setSearchQuery('');
       }
     } catch (err) {
       setError('Error fetching attempt details: ' + err.message);
@@ -777,7 +787,7 @@ const MyResult = () => {
                         value={searchQuery}
                         onChange={(e) => {
                           setSearchQuery(e.target.value);
-                          setCurrentPage(1); // Reset to first page on search
+                          setCurrentPage(1);
                         }}
                         placeholder="Search questions..."
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
@@ -803,9 +813,14 @@ const MyResult = () => {
                         const explanation = selectedAttempt.questionExplanations?.find(
                           (exp) => exp.questionId.toString() === question._id.toString()
                         );
-                        const isCorrect =
-                          answer.selectedOptions?.sort().join(',') ===
-                          question.correctAnswers?.sort().join(',');
+                        let isCorrect = false;
+                        if (question.questionType === 'multipleChoice') {
+                          isCorrect =
+                            answer.selectedOptions?.sort().join(',') ===
+                            question.correctAnswers?.sort().join(',');
+                        } else if (question.questionType === 'numerical') {
+                          isCorrect = answer.numericalAnswer !== null && answer.numericalAnswer === question.correctAnswers?.[0];
+                        }
                         const isExpanded = expandedQuestions[globalIndex];
 
                         return (
@@ -858,107 +873,123 @@ const MyResult = () => {
                               </div>
                             )}
 
-                            <div className="mb-4">
-                              <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">All Options</p>
-                              <div className="space-y-2">
-                                {question.options?.map((option, optIndex) => {
-                                  const isSelected = answer.selectedOptions?.includes(optIndex.toString());
-                                  const isCorrectOption = question.correctAnswers?.includes(optIndex.toString());
-                                  return (
-                                    <div
-                                      key={optIndex}
-                                      className={`p-3 rounded-lg flex items-start space-x-2 ${
-                                        isCorrectOption
-                                          ? 'bg-green-50 border border-green-200'
-                                          : isSelected && !isCorrectOption
-                                          ? 'bg-red-50 border border-red-200'
-                                          : 'bg-gray-50 border border-gray-200'
-                                      }`}
-                                    >
-                                      <span className="text-xs sm:text-sm font-medium text-gray-700">
-                                        {String.fromCharCode(65 + optIndex)}:
-                                      </span>
-                                      <div className="flex-1 break-words">
-                                        {renderMathOrText(option.optionText || `Option ${optIndex}`)}
-                                        {option.imageUrl && option.imageUrl !== '' && (
-                                          <img
-                                            src={`${BASE_URL}${option.imageUrl}`}
-                                            alt={`Option ${optIndex} image`}
-                                            className="mt-2 max-w-full h-auto rounded border border-gray-200"
-                                            onError={(e) => {
-                                              console.error(`Failed to load option image: ${BASE_URL}${option.imageUrl}`);
-                                              e.target.src = '/placeholder-image.jpg';
-                                            }}
-                                            onLoad={() => console.log(`Successfully loaded option image: ${BASE_URL}${option.imageUrl}`)}
-                                          />
-                                        )}
+                            {question.questionType === 'multipleChoice' && (
+                              <div className="mb-4">
+                                <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">All Options</p>
+                                <div className="space-y-2">
+                                  {question.options?.map((option, optIndex) => {
+                                    const isSelected = answer.selectedOptions?.includes(optIndex.toString());
+                                    const isCorrectOption = question.correctAnswers?.includes(optIndex.toString());
+                                    return (
+                                      <div
+                                        key={optIndex}
+                                        className={`p-3 rounded-lg flex items-start space-x-2 ${
+                                          isCorrectOption
+                                            ? 'bg-green-50 border border-green-200'
+                                            : isSelected && !isCorrectOption
+                                            ? 'bg-red-50 border border-red-200'
+                                            : 'bg-gray-50 border border-gray-200'
+                                        }`}
+                                      >
+                                        <span className="text-xs sm:text-sm font-medium text-gray-700">
+                                          {String.fromCharCode(65 + optIndex)}:
+                                        </span>
+                                        <div className="flex-1 break-words">
+                                          {renderMathOrText(option.optionText || `Option ${optIndex}`)}
+                                          {option.imageUrl && option.imageUrl !== '' && (
+                                            <img
+                                              src={`${BASE_URL}${option.imageUrl}`}
+                                              alt={`Option ${optIndex} image`}
+                                              className="mt-2 max-w-full h-auto rounded border border-gray-200"
+                                              onError={(e) => {
+                                                console.error(`Failed to load option image: ${BASE_URL}${option.imageUrl}`);
+                                                e.target.src = '/placeholder-image.jpg';
+                                              }}
+                                              onLoad={() => console.log(`Successfully loaded option image: ${BASE_URL}${option.imageUrl}`)}
+                                            />
+                                          )}
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          {isSelected && (
+                                            <span className="text-xs sm:text-sm font-medium text-blue-600">Your Answer</span>
+                                          )}
+                                          {isCorrectOption && (
+                                            <CheckCircle className="w-4 h-4 text-green-600" />
+                                          )}
+                                          {isSelected && !isCorrectOption && (
+                                            <XCircle className="w-4 h-4 text-red-600" />
+                                          )}
+                                        </div>
                                       </div>
-                                      <div className="flex items-center space-x-2">
-                                        {isSelected && (
-                                          <span className="text-xs sm:text-sm font-medium text-blue-600">Your Answer</span>
-                                        )}
-                                        {isCorrectOption && (
-                                          <CheckCircle className="w-4 h-4 text-green-600" />
-                                        )}
-                                        {isSelected && !isCorrectOption && (
-                                          <XCircle className="w-4 h-4 text-red-600" />
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
+                            )}
 
                             <div className="grid grid-cols-1 gap-4 mb-4">
                               <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
                                 <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Your Answer</p>
                                 <p className="text-gray-800 text-sm break-words">
-                                  {answer.selectedOptions?.length > 0
-                                    ? answer.selectedOptions
-                                        .map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
-                                        .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])
-                                    : 'Not answered'}
+                                  {question.questionType === 'multipleChoice' ? (
+                                    answer.selectedOptions?.length > 0
+                                      ? answer.selectedOptions
+                                          .map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
+                                          .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])
+                                      : 'Not answered'
+                                  ) : (
+                                    answer.numericalAnswer !== null && answer.numericalAnswer !== undefined
+                                      ? answer.numericalAnswer
+                                      : 'Not answered'
+                                  )}
                                 </p>
-                                {answer.selectedOptions?.map((opt, i) => (
-                                  question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
-                                    <img
-                                      key={i}
-                                      src={`${BASE_URL}${question.options[opt].imageUrl}`}
-                                      alt={`Option ${opt} image`}
-                                      className="mt-2 max-w-full h-auto rounded border border-gray-200"
-                                      onError={(e) => {
-                                        console.error(`Failed to load option image: ${BASE_URL}${question.options[opt].imageUrl}`);
-                                        e.target.src = '/placeholder-image.jpg';
-                                      }}
-                                      onLoad={() => console.log(`Successfully loaded option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
-                                    />
-                                  ) : null
-                                ))}
+                                {question.questionType === 'multipleChoice' &&
+                                  answer.selectedOptions?.map((opt, i) =>
+                                    question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
+                                      <img
+                                        key={i}
+                                        src={`${BASE_URL}${question.options[opt].imageUrl}`}
+                                        alt={`Option ${opt} image`}
+                                        className="mt-2 max-w-full h-auto rounded border border-gray-200"
+                                        onError={(e) => {
+                                          console.error(`Failed to load option image: ${BASE_URL}${question.options[opt].imageUrl}`);
+                                          e.target.src = '/placeholder-image.jpg';
+                                        }}
+                                        onLoad={() => console.log(`Successfully loaded option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
+                                      />
+                                    ) : null
+                                  )}
                               </div>
 
                               <div className="bg-green-50 rounded-lg p-3 sm:p-4">
                                 <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Correct Answer</p>
                                 <p className="text-green-800 text-sm break-words">
-                                  {question.correctAnswers
-                                    ?.map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
-                                    .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])}
+                                  {question.questionType === 'multipleChoice' ? (
+                                    question.correctAnswers
+                                      ?.map((opt) => renderMathOrText(question.options[opt]?.optionText || `Option ${opt}`))
+                                      .reduce((acc, curr, i) => [...acc, i > 0 ? ', ' : '', curr], [])
+                                  ) : (
+                                    question.correctAnswers && question.correctAnswers.length > 0
+                                      ? question.correctAnswers[0]
+                                      : (console.warn(`Correct answer missing for numerical question ID: ${question._id}`), 'Not available')
+                                  )}
                                 </p>
-                                {question.correctAnswers?.map((opt, i) => (
-                                  question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
-                                    <img
-                                      key={i}
-                                      src={`${BASE_URL}${question.options[opt].imageUrl}`}
-                                      alt={`Correct option ${opt} image`}
-                                      className="mt-2 max-w-full h-auto rounded border border-gray-200"
-                                      onError={(e) => {
-                                        console.error(`Failed to load correct option image: ${BASE_URL}${question.options[opt].imageUrl}`);
-                                        e.target.src = '/placeholder-image.jpg';
-                                      }}
-                                      onLoad={() => console.log(`Successfully loaded correct option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
-                                    />
-                                  ) : null
-                                ))}
+                                {question.questionType === 'multipleChoice' &&
+                                  question.correctAnswers?.map((opt, i) =>
+                                    question.options[opt]?.imageUrl && question.options[opt].imageUrl !== '' ? (
+                                      <img
+                                        key={i}
+                                        src={`${BASE_URL}${question.options[opt].imageUrl}`}
+                                        alt={`Correct option ${opt} image`}
+                                        className="mt-2 max-w-full h-auto rounded border border-gray-200"
+                                        onError={(e) => {
+                                          console.error(`Failed to load correct option image: ${BASE_URL}${question.options[opt].imageUrl}`);
+                                          e.target.src = '/placeholder-image.jpg';
+                                        }}
+                                        onLoad={() => console.log(`Successfully loaded correct option image: ${BASE_URL}${question.options[opt].imageUrl}`)}
+                                      />
+                                    ) : null
+                                  )}
                               </div>
                             </div>
 

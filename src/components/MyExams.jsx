@@ -1,12 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Clock, AlertCircle, CheckCircle, Flag, ArrowLeft, ArrowRight, Save } from 'lucide-react';
+import { Clock, AlertCircle, CheckCircle, Flag, ArrowLeft, ArrowRight, Save, ChevronDown } from 'lucide-react';
 import axiosInstance from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 
-// Backend base URL (adjust if your backend runs on a different port or domain)
+// Backend base URL
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // Modal Component
@@ -51,6 +52,7 @@ const StudentExamPortal = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
+  const [currentSection, setCurrentSection] = useState(null); // Track current section
   const sections = ['Physics', 'Chemistry', 'Math', 'Biology'];
 
   const { user } = useAuth();
@@ -120,8 +122,12 @@ const StudentExamPortal = () => {
       const fetchedQuestions = questionsResponse.data.questions || [];
       setQuestions(fetchedQuestions);
 
-      if (fetchedQuestions.length > 0 && currentQuestionIndex >= fetchedQuestions.length) {
-        setCurrentQuestionIndex(0);
+      // Set initial section based on the first question
+      if (fetchedQuestions.length > 0) {
+        setCurrentSection(fetchedQuestions[0].section || sections[0]);
+        if (currentQuestionIndex >= fetchedQuestions.length) {
+          setCurrentQuestionIndex(0);
+        }
       }
 
       const endTime = new Date(exam.endTime);
@@ -389,6 +395,7 @@ const StudentExamPortal = () => {
     await saveAnswer();
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
+      setCurrentSection(questions[currentQuestionIndex + 1].section);
       setIsNavigatorOpen(false);
     }
   };
@@ -397,6 +404,7 @@ const StudentExamPortal = () => {
     await saveAnswer();
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
+      setCurrentSection(questions[currentQuestionIndex - 1].section);
       setIsNavigatorOpen(false);
     }
   };
@@ -408,6 +416,7 @@ const StudentExamPortal = () => {
     }
     await saveAnswer();
     setCurrentQuestionIndex(index);
+    setCurrentSection(questions[index].section);
     setIsNavigatorOpen(false);
   };
 
@@ -772,6 +781,23 @@ const StudentExamPortal = () => {
     .modal-content button {
       padding: 0.5rem 1rem;
     }
+
+    .section-tab {
+      padding: 8px 16px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .section-tab.active {
+      border-bottom-color: #3b82f6;
+      color: #3b82f6;
+      font-weight: 600;
+    }
+
+    .section-tab:hover {
+      background-color: #f3f4f6;
+    }
   `;
 
   const renderExamInterface = () => {
@@ -834,6 +860,11 @@ const StudentExamPortal = () => {
 
     const isSubmitDisabled = !isManualSubmissionAllowed();
 
+    // Filter sections with questions
+    const activeSections = sections.filter(section =>
+      questions.some(q => q.section === section)
+    );
+
     return (
       <div className="container mx-auto px-4 py-4 sm:px-6 max-w-6xl">
         {fullscreenWarning}
@@ -879,47 +910,89 @@ const StudentExamPortal = () => {
                     Close
                   </button>
                 </div>
-                {sections.map((section) => {
-                  const sectionQuestions = questions.filter((q) => q.section === section);
-                  if (sectionQuestions.length === 0) return null;
-                  return (
-                    <div key={section} className="mb-3 sm:mb-4">
-                      <h3 className="text-xs sm:text-sm font-semibold text-gray-600 mb-2">{section}</h3>
-                      <div className="grid grid-cols-5 sm:grid-cols-4 lg:grid-cols-3 gap-1 sm:gap-2">
-                        {sectionQuestions.map((q, index) => {
-                          const globalIndex = questions.findIndex((question) => question._id === q._id);
-                          const qAnswers = answers[q._id] || { attemptStatus: 'not_attempted' };
-                          let buttonClass = 'w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm';
 
-                          switch (qAnswers.attemptStatus) {
-                            case 'attempted':
-                              buttonClass += ' bg-green-100 text-green-700 border border-green-300';
-                              break;
-                            case 'marked_for_review':
-                              buttonClass += ' bg-yellow-100 text-yellow-700 border border-yellow-300';
-                              break;
-                            default:
-                              buttonClass += ' bg-gray-100 text-gray-700 border border-gray-300';
-                          }
+                {/* Section Tabs (Desktop) */}
+                <div className="hidden lg:flex flex-wrap border-b mb-3">
+                  {activeSections.map(section => (
+                    <button
+                      key={section}
+                      className={`section-tab ${currentSection === section ? 'active' : ''}`}
+                      onClick={() => {
+                        setCurrentSection(section);
+                        const firstQuestionIndex = questions.findIndex(q => q.section === section);
+                        if (firstQuestionIndex !== -1 && firstQuestionIndex !== currentQuestionIndex) {
+                          jumpToQuestion(firstQuestionIndex);
+                        }
+                      }}
+                    >
+                      {section}
+                    </button>
+                  ))}
+                </div>
 
-                          if (globalIndex === currentQuestionIndex) {
-                            buttonClass += ' ring-2 ring-blue-500';
-                          }
+                {/* Section Dropdown (Mobile) */}
+                <div className="lg:hidden mb-3">
+                  <div className="relative">
+                    <select
+                      value={currentSection || ''}
+                      onChange={(e) => {
+                        const newSection = e.target.value;
+                        setCurrentSection(newSection);
+                        const firstQuestionIndex = questions.findIndex(q => q.section === newSection);
+                        if (firstQuestionIndex !== -1 && firstQuestionIndex !== currentQuestionIndex) {
+                          jumpToQuestion(firstQuestionIndex);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                    >
+                      {activeSections.map(section => (
+                        <option key={section} value={section}>
+                          {section}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500" size={16} />
+                  </div>
+                </div>
 
-                          return (
-                            <button
-                              key={q._id}
-                              className={buttonClass}
-                              onClick={() => jumpToQuestion(globalIndex)}
-                            >
-                              {index + 1}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
+                {/* Question Buttons for Current Section */}
+                <div className="mb-3 sm:mb-4">
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-600 mb-2">{currentSection}</h3>
+                  <div className="grid grid-cols-5 sm:grid-cols-4 lg:grid-cols-3 gap-1 sm:gap-2">
+                    {questions
+                      .filter(q => q.section === currentSection)
+                      .map((q, index) => {
+                        const globalIndex = questions.findIndex(question => question._id === q._id);
+                        const qAnswers = answers[q._id] || { attemptStatus: 'not_attempted' };
+                        let buttonClass = 'w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm';
+
+                        switch (qAnswers.attemptStatus) {
+                          case 'attempted':
+                            buttonClass += ' bg-green-100 text-green-700 border border-green-300';
+                            break;
+                          case 'marked_for_review':
+                            buttonClass += ' bg-yellow-100 text-yellow-700 border border-yellow-300';
+                            break;
+                          default:
+                            buttonClass += ' bg-gray-100 text-gray-700 border border-gray-300';
+                        }
+
+                        if (globalIndex === currentQuestionIndex) {
+                          buttonClass += ' ring-2 ring-blue-500';
+                        }
+
+                        return (
+                          <button
+                            key={q._id}
+                            className={buttonClass}
+                            onClick={() => jumpToQuestion(globalIndex)}
+                          >
+                            {index + 1}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
 
                 <div className="mt-3 sm:mt-4 space-y-2">
                   <div className="flex items-center">
